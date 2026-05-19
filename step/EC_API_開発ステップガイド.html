@@ -1,0 +1,1726 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ECサイトAPI 開発ステップガイド</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=JetBrains+Mono:wght@400;600&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0d1117;
+  --bg2: #161b22;
+  --bg3: #1c2333;
+  --border: #30363d;
+  --text: #e6edf3;
+  --muted: #7d8590;
+  --accent: #58a6ff;
+  --accent2: #3fb950;
+  --accent3: #f78166;
+  --accent4: #d2a8ff;
+  --accent5: #ffa657;
+  --yellow: #e3b341;
+  --code-bg: #161b22;
+  --phase-colors: #58a6ff, #3fb950, #f78166, #d2a8ff, #ffa657, #79c0ff, #56d364, #ff7b72;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+
+body {
+  font-family: 'Noto Sans JP', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  display: flex;
+}
+
+/* ── Sidebar ── */
+#sidebar {
+  width: 280px;
+  min-width: 280px;
+  background: var(--bg2);
+  border-right: 1px solid var(--border);
+  height: 100vh;
+  position: sticky;
+  top: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+#sidebar::-webkit-scrollbar { width: 4px; }
+#sidebar::-webkit-scrollbar-track { background: transparent; }
+#sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+.sidebar-header {
+  padding: 24px 20px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.sidebar-logo {
+  font-family: 'Syne', sans-serif;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--accent);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.sidebar-title {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.progress-bar-wrap {
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.progress-label {
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 6px;
+  display: flex;
+  justify-content: space-between;
+}
+.progress-bar {
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--accent2));
+  border-radius: 2px;
+  width: 0%;
+  transition: width 0.4s ease;
+}
+
+.nav-list { padding: 12px 0; flex: 1; }
+.nav-phase {
+  padding: 8px 20px 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.nav-phase-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  flex-shrink: 0;
+}
+.nav-step {
+  padding: 6px 20px 6px 36px;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-left: 2px solid transparent;
+  margin-left: -1px;
+}
+.nav-step:hover { color: var(--text); background: rgba(88,166,255,0.05); }
+.nav-step.active { color: var(--accent); border-left-color: var(--accent); background: rgba(88,166,255,0.08); }
+.nav-step.done { color: var(--accent2); }
+.nav-step.done::before { content: '✓'; font-size: 10px; color: var(--accent2); }
+.nav-step:not(.done)::before { content: '›'; font-size: 14px; color: var(--border); }
+
+/* ── Main ── */
+#main {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0;
+}
+#main::-webkit-scrollbar { width: 6px; }
+#main::-webkit-scrollbar-track { background: transparent; }
+#main::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+.hero {
+  background: linear-gradient(135deg, #0d1117 0%, #1a1f2e 40%, #0d1117 100%);
+  border-bottom: 1px solid var(--border);
+  padding: 60px 64px 48px;
+  position: relative;
+  overflow: hidden;
+}
+.hero::before {
+  content: '';
+  position: absolute;
+  top: -80px; right: -80px;
+  width: 400px; height: 400px;
+  background: radial-gradient(circle, rgba(88,166,255,0.08) 0%, transparent 70%);
+  pointer-events: none;
+}
+.hero-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  background: rgba(88,166,255,0.1);
+  border: 1px solid rgba(88,166,255,0.3);
+  border-radius: 20px;
+  font-size: 11px;
+  color: var(--accent);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 20px;
+  font-family: 'JetBrains Mono', monospace;
+}
+.hero h1 {
+  font-family: 'Syne', sans-serif;
+  font-size: 36px;
+  font-weight: 800;
+  line-height: 1.2;
+  margin-bottom: 16px;
+  background: linear-gradient(135deg, #e6edf3 0%, #58a6ff 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.hero-sub {
+  font-size: 15px;
+  color: var(--muted);
+  line-height: 1.7;
+  max-width: 600px;
+}
+.tech-stack {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 28px;
+}
+.tech-tag {
+  padding: 5px 12px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.tech-tag span { font-size: 14px; }
+
+/* Roadmap overview */
+.roadmap-section {
+  padding: 48px 64px;
+  border-bottom: 1px solid var(--border);
+}
+.section-heading {
+  font-family: 'Syne', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 24px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.section-heading::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+.roadmap-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+.roadmap-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  position: relative;
+  overflow: hidden;
+  transition: border-color 0.2s;
+}
+.roadmap-card:hover { border-color: var(--accent); }
+.roadmap-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+}
+.roadmap-card:nth-child(1)::before { background: #58a6ff; }
+.roadmap-card:nth-child(2)::before { background: #3fb950; }
+.roadmap-card:nth-child(3)::before { background: #f78166; }
+.roadmap-card:nth-child(4)::before { background: #d2a8ff; }
+.roadmap-card:nth-child(5)::before { background: #ffa657; }
+.roadmap-card:nth-child(6)::before { background: #79c0ff; }
+.roadmap-card:nth-child(7)::before { background: #56d364; }
+.roadmap-card:nth-child(8)::before { background: #ff7b72; }
+.roadmap-num {
+  font-family: 'Syne', sans-serif;
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--border);
+  line-height: 1;
+  margin-bottom: 8px;
+}
+.roadmap-phase-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+.roadmap-steps-count {
+  font-size: 11px;
+  color: var(--muted);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* Phase sections */
+.phase-section {
+  padding: 48px 64px;
+  border-bottom: 1px solid var(--border);
+}
+.phase-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 32px;
+}
+.phase-badge {
+  width: 48px; height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Syne', sans-serif;
+  font-size: 18px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+.phase-title-wrap {}
+.phase-label {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-family: 'JetBrains Mono', monospace;
+  margin-bottom: 2px;
+}
+.phase-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 22px;
+  font-weight: 800;
+}
+
+/* Step cards */
+.step-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  margin-bottom: 20px;
+  overflow: hidden;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.step-card:hover {
+  border-color: rgba(88,166,255,0.4);
+  box-shadow: 0 0 0 1px rgba(88,166,255,0.1);
+}
+.step-header {
+  padding: 18px 24px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  cursor: pointer;
+  user-select: none;
+}
+.step-num {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: var(--bg3);
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.step-title {
+  font-size: 15px;
+  font-weight: 700;
+  flex: 1;
+}
+.step-time {
+  font-size: 11px;
+  color: var(--muted);
+  font-family: 'JetBrains Mono', monospace;
+  flex-shrink: 0;
+}
+.step-toggle {
+  color: var(--muted);
+  font-size: 18px;
+  flex-shrink: 0;
+  transition: transform 0.2s;
+}
+.step-card.open .step-toggle { transform: rotate(90deg); }
+
+.step-body {
+  display: none;
+  padding: 0 24px 24px;
+  border-top: 1px solid var(--border);
+}
+.step-card.open .step-body { display: block; }
+
+.step-goal {
+  margin: 16px 0 0;
+  padding: 14px 16px;
+  background: rgba(88,166,255,0.06);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 8px 8px 0;
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.7;
+}
+.step-goal strong { color: var(--accent); }
+
+.step-section-title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 20px 0 10px;
+}
+
+ol.step-list, ul.step-list {
+  padding-left: 20px;
+}
+ol.step-list li, ul.step-list li {
+  font-size: 13px;
+  line-height: 1.8;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+ol.step-list li::marker { color: var(--accent); font-weight: 600; }
+ul.step-list li::marker { color: var(--muted); }
+
+pre.code-block {
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  overflow-x: auto;
+  margin: 10px 0;
+  position: relative;
+}
+pre.code-block code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #e6edf3;
+}
+.code-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: var(--muted);
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-bottom: none;
+  padding: 4px 12px;
+  border-radius: 6px 6px 0 0;
+  display: inline-block;
+  margin-bottom: -1px;
+}
+.success-block {
+  background: rgba(63,185,80,0.08);
+  border: 1px solid rgba(63,185,80,0.3);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin: 10px 0;
+}
+.success-block .label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent2);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.success-block p {
+  font-size: 12px;
+  color: var(--text);
+  line-height: 1.6;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.warn-block {
+  background: rgba(255,166,87,0.08);
+  border: 1px solid rgba(255,166,87,0.3);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin: 10px 0;
+}
+.warn-block .label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent5);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.warn-block p { font-size: 13px; color: var(--text); line-height: 1.6; }
+
+.quiz-block {
+  background: rgba(210,168,255,0.06);
+  border: 1px solid rgba(210,168,255,0.25);
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin: 16px 0 0;
+}
+.quiz-block .label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent4);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+.quiz-block p { font-size: 13px; line-height: 1.7; color: var(--text); }
+
+.done-btn {
+  margin-top: 20px;
+  padding: 10px 20px;
+  background: rgba(63,185,80,0.1);
+  border: 1px solid rgba(63,185,80,0.4);
+  border-radius: 8px;
+  color: var(--accent2);
+  font-family: 'Noto Sans JP', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.done-btn:hover { background: rgba(63,185,80,0.2); }
+.done-btn.completed {
+  background: rgba(63,185,80,0.2);
+  border-color: var(--accent2);
+}
+
+/* colors per phase */
+.p1 { color: #58a6ff; } .p1bg { background: rgba(88,166,255,0.12); }
+.p2 { color: #3fb950; } .p2bg { background: rgba(63,185,80,0.12); }
+.p3 { color: #f78166; } .p3bg { background: rgba(247,129,102,0.12); }
+.p4 { color: #d2a8ff; } .p4bg { background: rgba(210,168,255,0.12); }
+.p5 { color: #ffa657; } .p5bg { background: rgba(255,166,87,0.12); }
+.p6 { color: #79c0ff; } .p6bg { background: rgba(121,192,255,0.12); }
+.p7 { color: #56d364; } .p7bg { background: rgba(86,211,100,0.12); }
+.p8 { color: #ff7b72; } .p8bg { background: rgba(255,123,114,0.12); }
+
+.kw { color: #ff7b72; }
+.str { color: #a5d6ff; }
+.ann { color: #d2a8ff; }
+.cm { color: #7d8590; font-style: italic; }
+.typ { color: #ffa657; }
+.fn  { color: #d2a8ff; }
+.num { color: #79c0ff; }
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<nav id="sidebar">
+  <div class="sidebar-header">
+    <div class="sidebar-logo">Dev Guide</div>
+    <div class="sidebar-title">ECサイトAPI<br>開発ステップガイド</div>
+  </div>
+  <div class="progress-bar-wrap">
+    <div class="progress-label">
+      <span>進捗</span>
+      <span id="progress-pct">0%</span>
+    </div>
+    <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+  </div>
+  <div class="nav-list" id="nav-list">
+    <!-- JS generated -->
+  </div>
+</nav>
+
+<!-- MAIN -->
+<main id="main">
+  <!-- HERO -->
+  <div class="hero">
+    <div class="hero-badge">Step-by-Step Development Guide</div>
+    <h1>ECサイト<br>バックエンドAPI<br>開発ガイド</h1>
+    <p class="hero-sub">
+      3年目SEのための実践的な開発ロードマップ。<br>
+      環境構築からCI/CDデプロイまで、一歩ずつ丁寧に進めていきましょう。
+    </p>
+    <div class="tech-stack">
+      <div class="tech-tag"><span>☕</span> Java 17</div>
+      <div class="tech-tag"><span>🍃</span> Spring Boot 3</div>
+      <div class="tech-tag"><span>🗄️</span> Oracle DB</div>
+      <div class="tech-tag"><span>🐱</span> GitHub</div>
+      <div class="tech-tag"><span>⚙️</span> GitHub Actions</div>
+      <div class="tech-tag"><span>🐧</span> Ubuntu Server</div>
+      <div class="tech-tag"><span>🧪</span> JUnit 5</div>
+    </div>
+  </div>
+
+  <!-- ROADMAP -->
+  <div class="roadmap-section">
+    <div class="section-heading">全体ロードマップ</div>
+    <div class="roadmap-grid">
+      <div class="roadmap-card"><div class="roadmap-num">01</div><div class="roadmap-phase-name">開発環境を整える</div><div class="roadmap-steps-count">4 steps · 1〜2日</div></div>
+      <div class="roadmap-card"><div class="roadmap-num">02</div><div class="roadmap-phase-name">GitHubを設定する</div><div class="roadmap-steps-count">3 steps · 0.5日</div></div>
+      <div class="roadmap-card"><div class="roadmap-num">03</div><div class="roadmap-phase-name">Spring Bootを始める</div><div class="roadmap-steps-count">3 steps · 1日</div></div>
+      <div class="roadmap-card"><div class="roadmap-num">04</div><div class="roadmap-phase-name">Oracle DBに接続する</div><div class="roadmap-steps-count">3 steps · 1〜2日</div></div>
+      <div class="roadmap-card"><div class="roadmap-num">05</div><div class="roadmap-phase-name">APIを実装する</div><div class="roadmap-steps-count">5 steps · 8〜12日</div></div>
+      <div class="roadmap-card"><div class="roadmap-num">06</div><div class="roadmap-phase-name">テストを書く</div><div class="roadmap-steps-count">3 steps · 2〜3日</div></div>
+      <div class="roadmap-card"><div class="roadmap-num">07</div><div class="roadmap-phase-name">CI/CDを組む</div><div class="roadmap-steps-count">3 steps · 1〜2日</div></div>
+      <div class="roadmap-card"><div class="roadmap-num">08</div><div class="roadmap-phase-name">Ubuntu Serverへデプロイ</div><div class="roadmap-steps-count">3 steps · 1〜2日</div></div>
+    </div>
+  </div>
+
+  <!-- ═══ PHASE 1 ═══ -->
+  <div class="phase-section" id="phase-1">
+    <div class="phase-header">
+      <div class="phase-badge p1bg p1">01</div>
+      <div class="phase-title-wrap">
+        <div class="phase-label">Phase 1</div>
+        <div class="phase-title p1">開発環境を整える</div>
+      </div>
+    </div>
+
+    <!-- STEP 1-1 -->
+    <div class="step-card" id="step-1-1">
+      <div class="step-header" onclick="toggleStep('step-1-1')">
+        <div class="step-num p1">STEP 1-1</div>
+        <div class="step-title">JDKをインストールする</div>
+        <div class="step-time">⏱ 30分</div>
+        <div class="step-toggle">›</div>
+      </div>
+      <div class="step-body">
+        <div class="step-goal">
+          <strong>🎯 ゴール：</strong>コマンドプロンプトで <code>java -version</code> を実行し、Java 17 が表示される状態にする。
+        </div>
+        <div class="step-section-title">手順</div>
+        <ol class="step-list">
+          <li><a href="https://aws.amazon.com/jp/corretto/" style="color:var(--accent)">Amazon Corretto 17</a> のダウンロードページを開く</li>
+          <li>「Windows x64 JDK」のインストーラー（.msi）をダウンロードする</li>
+          <li>インストーラーを実行し、デフォルト設定でインストール（「JAVA_HOME を設定する」にチェックが入っていることを確認）</li>
+          <li>コマンドプロンプトを<strong>新規で</strong>開き、以下を実行する</li>
+        </ol>
+        <div class="code-label">cmd</div>
+        <pre class="code-block"><code>java -version
+javac -version</code></pre>
+        <div class="success-block">
+          <div class="label">✅ 成功の確認</div>
+          <p>openjdk version "17.x.x" 2023-xx-xx<br>OpenJDK Runtime Environment Corretto-17.x.x<br>javac 17.x.x</p>
+        </div>
+        <div class="warn-block">
+          <div class="label">⚠️ よくあるつまずき</div>
+          <p>「'java' は内部コマンドまたは外部コマンドとして認識されていません」と出た場合は、コマンドプロンプトを再起動してください。それでも出る場合は環境変数 JAVA_HOME を手動設定します。</p>
+        </div>
+        <div class="quiz-block">
+          <div class="label">🔰 確認問題</div>
+          <p><code>java -version</code> と <code>javac -version</code> の違いは何ですか？<br>両方打ってみて、どちらがどの役割を担うか説明してみましょう。</p>
+        </div>
+        <button class="done-btn" id="btn-step-1-1" onclick="markDone('step-1-1')">✓ このSTEP完了</button>
+      </div>
+    </div>
+
+    <!-- STEP 1-2 -->
+    <div class="step-card" id="step-1-2">
+      <div class="step-header" onclick="toggleStep('step-1-2')">
+        <div class="step-num p1">STEP 1-2</div>
+        <div class="step-title">Mavenをインストールする</div>
+        <div class="step-time">⏱ 20分</div>
+        <div class="step-toggle">›</div>
+      </div>
+      <div class="step-body">
+        <div class="step-goal">
+          <strong>🎯 ゴール：</strong><code>mvn -version</code> が通り、Maven と Java のバージョンが表示される状態にする。
+        </div>
+        <div class="step-section-title">手順</div>
+        <ol class="step-list">
+          <li><a href="https://maven.apache.org/download.cgi" style="color:var(--accent)">Maven公式サイト</a> から Binary zip archive をダウンロードする</li>
+          <li><code>C:\tools\maven</code> などに解凍する</li>
+          <li>システム環境変数 <code>Path</code> に <code>C:\tools\maven\bin</code> を追加する</li>
+          <li>コマンドプロンプトを再起動し、実行する</li>
+        </ol>
+        <div class="code-label">cmd</div>
+        <pre class="code-block"><code>mvn -version</code></pre>
+        <div class="success-block">
+          <div class="label">✅ 成功の確認</div>
+          <p>Apache Maven 3.x.x<br>Java version: 17.x.x</p>
+        </div>
+        <div class="quiz-block">
+          <div class="label">🔰 確認問題</div>
+          <p>Mavenとは何のためのツールですか？「依存関係」「ビルド」「テスト実行」のキーワードを使って説明してみましょう。</p>
+        </div>
+        <button class="done-btn" id="btn-step-1-2" onclick="markDone('step-1-2')">✓ このSTEP完了</button>
+      </div>
+    </div>
+
+    <!-- STEP 1-3 -->
+    <div class="step-card" id="step-1-3">
+      <div class="step-header" onclick="toggleStep('step-1-3')">
+        <div class="step-num p1">STEP 1-3</div>
+        <div class="step-title">IntelliJ IDEA をインストールする</div>
+        <div class="step-time">⏱ 30分</div>
+        <div class="step-toggle">›</div>
+      </div>
+      <div class="step-body">
+        <div class="step-goal">
+          <strong>🎯 ゴール：</strong>IntelliJ IDEA Community Edition が起動し、Javaプロジェクトを開ける状態にする。
+        </div>
+        <div class="step-section-title">手順</div>
+        <ol class="step-list">
+          <li><a href="https://www.jetbrains.com/idea/download/" style="color:var(--accent)">JetBrains公式</a> から <strong>Community Edition（無料）</strong> をダウンロードする</li>
+          <li>インストーラーを実行し、「.java ファイルの関連付け」にチェックを入れてインストール</li>
+          <li>起動後、「New Project」→「Java」を選択し、SDK に先ほどインストールしたJDK 17 を設定する</li>
+          <li>Hello.java を作成して以下を書き、▶ボタンで実行してみる</li>
+        </ol>
+        <div class="code-label">Hello.java</div>
+        <pre class="code-block"><code><span class="kw">public class</span> <span class="typ">Hello</span> {
+    <span class="kw">public static void</span> <span class="fn">main</span>(<span class="typ">String</span>[] args) {
+        <span class="typ">System</span>.out.<span class="fn">println</span>(<span class="str">"Hello, EC Site!"</span>);
+    }
+}</code></pre>
+        <div class="success-block">
+          <div class="label">✅ 成功の確認</div>
+          <p>コンソールに「Hello, EC Site!」と表示される</p>
+        </div>
+        <button class="done-btn" id="btn-step-1-3" onclick="markDone('step-1-3')">✓ このSTEP完了</button>
+      </div>
+    </div>
+
+    <!-- STEP 1-4 -->
+    <div class="step-card" id="step-1-4">
+      <div class="step-header" onclick="toggleStep('step-1-4')">
+        <div class="step-num p1">STEP 1-4</div>
+        <div class="step-title">Git をインストールする</div>
+        <div class="step-time">⏱ 20分</div>
+        <div class="step-toggle">›</div>
+      </div>
+      <div class="step-body">
+        <div class="step-goal">
+          <strong>🎯 ゴール：</strong><code>git --version</code> が通り、ユーザー名とメールアドレスが設定された状態にする。
+        </div>
+        <div class="step-section-title">手順</div>
+        <ol class="step-list">
+          <li><a href="https://git-scm.com/download/win" style="color:var(--accent)">Git for Windows</a> をダウンロードしてインストール（デフォルト設定でOK）</li>
+          <li>Git Bash または コマンドプロンプトを開いて動作確認</li>
+          <li>ユーザー情報を設定する（GitHubアカウントと同じ情報を使う）</li>
+        </ol>
+        <div class="code-label">cmd / Git Bash</div>
+        <pre class="code-block"><code>git --version
+git config --global user.name "あなたの名前"
+git config --global user.email "あなたのメールアドレス"
+git config --list</code></pre>
+        <div class="quiz-block">
+          <div class="label">🔰 確認問題</div>
+          <p><code>git config --global</code> と <code>git config --local</code> の違いは何ですか？どちらが優先されますか？</p>
+        </div>
+        <button class="done-btn" id="btn-step-1-4" onclick="markDone('step-1-4')">✓ このSTEP完了</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ PHASE 2 ═══ -->
+  <div class="phase-section" id="phase-2">
+    <div class="phase-header">
+      <div class="phase-badge p2bg p2">02</div>
+      <div class="phase-title-wrap">
+        <div class="phase-label">Phase 2</div>
+        <div class="phase-title p2">GitHubを設定する</div>
+      </div>
+    </div>
+
+    <div class="step-card" id="step-2-1">
+      <div class="step-header" onclick="toggleStep('step-2-1')">
+        <div class="step-num p2">STEP 2-1</div>
+        <div class="step-title">GitHubリポジトリを作成する</div>
+        <div class="step-time">⏱ 15分</div>
+        <div class="step-toggle">›</div>
+      </div>
+      <div class="step-body">
+        <div class="step-goal">
+          <strong>🎯 ゴール：</strong>GitHub上に <code>ec-site-api</code> リポジトリが作成され、ローカルに clone できた状態にする。
+        </div>
+        <div class="step-section-title">手順</div>
+        <ol class="step-list">
+          <li>GitHub にログインし、右上「＋」→「New repository」をクリック</li>
+          <li>Repository name: <code>ec-site-api</code>、Private を選択、<strong>「Add a README file」にチェック</strong>を入れて作成</li>
+          <li>作成したリポジトリのページで「Code」→ HTTPS の URL をコピーする</li>
+          <li>ローカルに clone する</li>
+        </ol>
+        <div class="code-label">cmd</div>
+        <pre class="code-block"><code>cd C:\work
+git clone https://github.com/あなた/ec-site-api.git
+cd ec-site-api
+ls -la</code></pre>
+        <button class="done-btn" id="btn-step-2-1" onclick="markDone('step-2-1')">✓ このSTEP完了</button>
+      </div>
+    </div>
+
+    <div class="step-card" id="step-2-2">
+      <div class="step-header" onclick="toggleStep('step-2-2')">
+        <div class="step-num p2">STEP 2-2</div>
+        <div class="step-title">ブランチ戦略を理解して設定する</div>
+        <div class="step-time">⏱ 20分</div>
+        <div class="step-toggle">›</div>
+      </div>
+      <div class="step-body">
+        <div class="step-goal">
+          <strong>🎯 ゴール：</strong><code>main</code> ブランチを本番用に保護し、<code>develop</code> ブランチを作成できた状態にする。
+        </div>
+        <div class="step-section-title">ブランチ構成</div>
+        <ul class="step-list">
+          <li><code>main</code> ─ 本番リリース用。直接 push 禁止。</li>
+          <li><code>develop</code> ─ 開発統合用。機能実装後にここへマージ。</li>
+          <li><code>feature/xxx</code> ─ 機能単位の作業ブランチ（例: <code>feature/user-auth</code>）</li>
+        </ul>
+        <div class="code-label">Git Bash</div>
+        <pre class="code-block"><code><span class="cm"># developブランチを作成してpush</span>
+git checkout -b develop
+git push origin develop</code></pre>
+        <div class="step-section-title">main ブランチの保護設定</div>
+        <ol class="step-list">
+          <li>GitHub のリポジトリページ → Settings → Branches</li>
+          <li>「Add branch protection rule」→ Branch name: <code>main</code></li>
+          <li>「Require a pull request before merging」にチェック → Save</li>
+        </ol>
+        <button class="done-btn" id="btn-step-2-2" onclick="markDone('step-2-2')">✓ このSTEP完了</button>
+      </div>
+    </div>
+
+    <div class="step-card" id="step-2-3">
+      <div class="step-header" onclick="toggleStep('step-2-3')">
+        <div class="step-num p2">STEP 2-3</div>
+        <div class="step-title">.gitignore を設定する</div>
+        <div class="step-time">⏱ 10分</div>
+        <div class="step-toggle">›</div>
+      </div>
+      <div class="step-body">
+        <div class="step-goal">
+          <strong>🎯 ゴール：</strong>Javaプロジェクト用の <code>.gitignore</code> が設定され、不要なファイルがコミットされない状態にする。
+        </div>
+        <div class="code-label">.gitignore</div>
+        <pre class="code-block"><code><span class="cm"># Compiled class files</span>
+*.class
+target/
+
+<span class="cm"># IntelliJ IDEA</span>
+.idea/
+*.iml
+
+<span class="cm"># Maven</span>
+*.jar
+*.war
+
+<span class="cm"># 機密情報（絶対にコミットしない！）</span>
+application-local.properties
+*.env</code></pre>
+        <div class="warn-block">
+          <div class="label">⚠️ 重要</div>
+          <p>DBのパスワードや秘密鍵は <strong>絶対にGitにコミットしない</strong> こと。一度でも push されると履歴に残ります。</p>
+        </div>
+        <button class="done-btn" id="btn-step-2-3" onclick="markDone('step-2-3')">✓ このSTEP完了</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ PHASE 3 ═══ -->
+  <div class="phase-section" id="phase-3">
+    <div class="phase-header">
+      <div class="phase-badge p3bg p3">03</div>
+      <div class="phase-title-wrap">
+        <div class="phase-label">Phase 3</div>
+        <div class="phase-title p3">Spring Bootプロジェクトを始める</div>
+      </div>
+    </div>
+
+    <div class="step-card" id="step-3-1">
+      <div class="step-header" onclick="toggleStep('step-3-1')">
+        <div class="step-num p3">STEP 3-1</div>
+        <div class="step-title">Spring Initializr でプロジェクトを生成する</div>
+        <div class="step-time">⏱ 20分</div>
+        <div class="step-toggle">›</div>
+      </div>
+      <div class="step-body">
+        <div class="step-goal">
+          <strong>🎯 ゴール：</strong>Spring Boot プロジェクトが生成され、IntelliJ で開いてビルドが通る状態にする。
+        </div>
+        <div class="step-section-title">設定内容</div>
+        <ul class="step-list">
+          <li>サイト: <a href="https://start.spring.io" style="color:var(--accent)">start.spring.io</a></li>
+          <li>Project: <strong>Maven</strong> / Language: <strong>Java</strong> / Spring Boot: <strong>3.x.x</strong></li>
+          <li>Java: <strong>17</strong> / Packaging: <strong>Jar</strong></li>
+          <li>依存関係: <code>Spring Web</code>, <code>Spring Data JPA</code>, <code>Spring Security</code>, <code>Oracle Driver</code>, <code>Validation</code>, <code>Lombok</code></li>
+        </ul>
+        <div class="step-section-title">手順</div>
+        <ol class="step-list">
+          <li>「GENERATE」をクリックしてZIPをダウンロード</li>
+          <li>clone したリポジトリフォルダに解凍する</li>
+          <li>IntelliJ で <code>pom.xml</code> を「Open as Project」で開く</li>
+          <li>Maven の依存関係ダウンロードが完了するまで待つ</li>
+          <li>メインクラスを右クリック → Run で起動確認</li>
+        </ol>
+        <button class="done-btn" id="btn-step-3-1" onclick="markDone('step-3-1')">✓ このSTEP完了</button>
+      </div>
+    </div>
+
+    <div class="step-card" id="step-3-2">
+      <div class="step-header" onclick="toggleStep('step-3-2')">
+        <div class="step-num p3">STEP 3-2</div>
+        <div class="step-title">「Hello World」APIを1本作る</div>
+        <div class="step-time">⏱ 30分</div>
+        <div class="step-toggle">›</div>
+      </div>
+      <div class="step-body">
+        <div class="step-goal">
+          <strong>🎯 ゴール：</strong><code>GET /api/hello</code> にアクセスして JSON レスポンスが返ってくる状態にする。
+        </div>
+        <div class="code-label">HealthController.java</div>
+        <pre class="code-block"><code><span class="ann">@RestController</span>
+<span class="ann">@RequestMapping</span>(<span class="str">"/api"</span>)
+<span class="kw">public class</span> <span class="typ">HealthController</span> {
+
+    <span class="ann">@GetMapping</span>(<span class="str">"/hello"</span>)
+    <span class="kw">public</span> <span class="typ">Map</span>&lt;<span class="typ">String</span>, <span class="typ">String</span>&gt; <span class="fn">hello</span>() {
+        <span class="kw">return</span> <span class="typ">Map</span>.<span class="fn">of</span>(
+            <span class="str">"message"</span>, <span class="str">"Hello, EC Site API!"</span>,
+            <span class="str">"status"</span>, <span class="str">"ok"</span>
+        );
+    }
+}</code></pre>
+        <div class="step-section-title">ブラウザまたは curl で確認</div>
+        <div class="code-label">cmd</div>
+        <pre class="code-block"><code>curl http://localhost:8080/api/hello</code></pre>
+        <div class="success-block">
+          <div class="label">✅ 期待するレスポンス</div>
+          <p>{"message":"Hello, EC Site API!","status":"ok"}</p>
+        </div>
+        <div class="quiz-block">
+          <div class="label">🔰 確認問題</div>
+          <p><code>@RestController</code> と <code>@Controller</code> の違いは何ですか？なぜ今回は <code>@RestController</code> を使いましたか？</p>
+        </div>
+        <button class="done-btn" id="btn-step-3-2" onclick="markDone('step-3-2')">✓ このSTEP完了</button>
+      </div>
+    </div>
+
+    <div class="step-card" id="step-3-3">
+      <div class="step-header" onclick="toggleStep('step-3-3')">
+        <div class="step-num p3">STEP 3-3</div>
+        <div class="step-title">パッケージ構成を設計する</div>
+        <div class="step-time">⏱ 20分</div>
+        <div class="step-toggle">›</div>
+      </div>
+      <div class="step-body">
+        <div class="step-goal">
+          <strong>🎯 ゴール：</strong>レイヤードアーキテクチャに従ったフォルダ構成を理解し、作成できた状態にする。
+        </div>
+        <div class="code-label">推奨パッケージ構成</div>
+        <pre class="code-block"><code>src/main/java/com/example/ecsite/
+├── controller/      <span class="cm"># HTTPリクエスト受付</span>
+├── service/         <span class="cm"># ビジネスロジック</span>
+├── repository/      <span class="cm"># DB操作（JPA）</span>
+├── entity/          <span class="cm"># DBテーブルに対応するクラス</span>
+├── dto/             <span class="cm"># リクエスト/レスポンス用クラス</span>
+│   ├── request/
+│   └── response/
+├── exception/       <span class="cm"># カスタム例外・エラーハンドラ</span>
+├── security/        <span class="cm"># JWT・Spring Security設定</span>
+└── config/          <span class="cm"># 各種Bean設定</span></code></pre>
+        <div class="quiz-block">
+          <div class="label">🔰 確認問題</div>
+          <p>なぜ <code>entity</code> をそのまま API レスポンスとして返してはいけないのですか？<code>dto/response</code> を別に作る理由を説明してみましょう。</p>
+        </div>
+        <button class="done-btn" id="btn-step-3-3" onclick="markDone('step-3-3')">✓ このSTEP完了</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ PHASE 4 ═══ -->
+  <div class="phase-section" id="phase-4">
+    <div class="phase-header">
+      <div class="phase-badge p4bg p4">04</div>
+      <div class="phase-title-wrap">
+        <div class="phase-label">Phase 4</div>
+        <div class="phase-title p4">Oracle DBに接続する</div>
+      </div>
+    </div>
+
+    <div class="step-card" id="step-4-1">
+      <div class="step-header" onclick="toggleStep('step-4-1')">
+        <div class="step-num p4">STEP 4-1</div>
+        <div class="step-title">Ubuntu Server に Oracle DB をセットアップする</div>
+        <div class="step-time">⏱ 60〜90分</div>
+        <div class="step-toggle">›</div>
+      </div>
+      <div class="step-body">
+        <div class="step-goal">
+          <strong>🎯 ゴール：</strong>Ubuntu Server 上の Oracle DB に、Windows の SQL*Plus または DBeaver から接続できる状態にする。
+        </div>
+        <div class="step-section-title">Ubuntu Server 側の作業</div>
+        <div class="code-label">bash（Ubuntu Server）</div>
+        <pre class="code-block"><code><span class="cm"># Oracle XE 21c をインストール（RPM→DEBに変換）</span>
+sudo apt-get install alien -y
+sudo alien --scripts oracle-database-xe-21c-1.0-1.x86_64.rpm
+sudo dpkg -i oracle-database-xe-21c_1.0-2_amd64.deb
+sudo /etc/init.d/oracle-xe-21c configure</code></pre>
+        <div class="step-section-title">VirtualBox のポート転送設定</div>
+        <ul class="step-list">
+          <li>VirtualBox → 設定 → ネットワーク → 高度 → ポートフォワーディング</li>
+          <li>ホストポート: <code>1521</code> → ゲストポート: <code>1521</code>（Oracle リスナー）</li>
+          <li>ホストポート: <code>22</code> → ゲストポート: <code>22</code>（SSH）</li>
+        </ul>
+        <div class="step-section-title">Windows 側から接続確認（DBeaver）</div>
+        <ul class="step-list">
+          <li>Driver: Oracle / Host: <code>localhost</code> / Port: <code>1521</code></li>
+          <li>SID: <code>XE</code> / Username: <code>system</code></li>
+        </ul>
+        <button class="done-btn" id="btn-step-4-1" onclick="markDone('step-4-1')">✓ このSTEP完了</button>
+      </div>
+    </div>
+
+    <div class="step-card" id="step-4-2">
+      <div class="step-header" onclick="toggleStep('step-4-2')">
+        <div class="step-num p4">STEP 4-2</div>
+        <div class="step-title">Spring Boot から Oracle DB に接続する</div>
+        <div class="step-time">⏱ 30分</div>
+        <div class="step-toggle">›</div>
+      </div>
+      <div class="step-body">
+        <div class="step-goal">
+          <strong>🎯 ゴール：</strong>アプリ起動時にDB接続エラーが出ず、JPA の DDL 自動生成が動く状態にする。
+        </div>
+        <div class="code-label">application.properties</div>
+        <pre class="code-block"><code><span class="cm"># Oracle DB接続設定</span>
+spring.datasource.url=jdbc:oracle:thin:@localhost:1521:XE
+spring.datasource.username=ec_user
+spring.datasource.password=${DB_PASSWORD}
+spring.datasource.driver-class-name=oracle.jdbc.OracleDriver
+
+<span class="cm"># JPA設定</span>
+spring.jpa.database-platform=org.hibernate.dialect.OracleDialect
+spring.jpa.hibernate.ddl-auto=validate
+spring.jpa.show-sql=true</code></pre>
+        <div class="warn-block">
+          <div class="label">⚠️ パスワードの扱い</div>
+          <p><code>${DB_PASSWORD}</code> のように環境変数で参照し、パスワードをファイルに直書きしないこと。IntelliJ の「Run Configuration」→「Environment variables」で設定できます。</p>
+        </div>
+        <div class="quiz-block">
+          <div class="label">🔰 確認問題</div>
+          <p><code>ddl-auto=create</code> と <code>validate</code> の違いは何ですか？本番環境では何を設定すべきですか？</p>
+        </div>
+        <button class="done-btn" id="btn-step-4-2" onclick="markDone('step-4-2')">✓ このSTEP完了</button>
+      </div>
+    </div>
+
+    <div class="step-card" id="step-4-3">
+      <div class="step-header" onclick="toggleStep('step-4-3')">
+        <div class="step-num p4">STEP 4-3</div>
+        <div class="step-title">テーブルを作成する（DDL）</div>
+        <div class="step-time">⏱ 45分</div>
+        <div class="step-toggle">›</div>
+      </div>
+      <div class="step-body">
+        <div class="step-goal">
+          <strong>🎯 ゴール：</strong>DB設計書のテーブルを Oracle に作成し、JPA の Entity クラスと紐づけられた状態にする。
+        </div>
+        <div class="step-section-title">まず USERS テーブルから作成する</div>
+        <div class="code-label">DDL（SQL）</div>
+        <pre class="code-block"><code><span class="kw">CREATE TABLE</span> users (
+    id          <span class="typ">NUMBER</span> <span class="kw">GENERATED ALWAYS AS IDENTITY PRIMARY KEY</span>,
+    name        <span class="typ">VARCHAR2</span>(<span class="num">100</span>)  <span class="kw">NOT NULL</span>,
+    email       <span class="typ">VARCHAR2</span>(<span class="num">255</span>)  <span class="kw">NOT NULL UNIQUE</span>,
+    password_hash <span class="typ">VARCHAR2</span>(<span class="num">255</span>) <span class="kw">NOT NULL</span>,
+    role        <span class="typ">VARCHAR2</span>(<span class="num">20</span>)   <span class="kw">DEFAULT</span> <span class="str">'USER'</span> <span class="kw">NOT NULL</span>,
+    address     <span class="typ">CLOB</span>,
+    created_at  <span class="typ">TIMESTAMP</span>      <span class="kw">DEFAULT SYSTIMESTAMP NOT NULL</span>,
+    updated_at  <span class="typ">TIMESTAMP</span>      <span class="kw">DEFAULT SYSTIMESTAMP NOT NULL</span>
+);</code></pre>
+        <div class="code-label">User.java（Entity）</div>
+        <pre class="code-block"><code><span class="ann">@Entity</span>
+<span class="ann">@Table</span>(name = <span class="str">"users"</span>)
+<span class="ann">@Data</span>
+<span class="kw">public class</span> <span class="typ">User</span> {
+    <span class="ann">@Id</span>
+    <span class="ann">@GeneratedValue</span>(strategy = GenerationType.IDENTITY)
+    <span class="kw">private</span> <span class="typ">Long</span> id;
+
+    <span class="ann">@Column</span>(nullable = <span class="kw">false</span>)
+    <span class="kw">private</span> <span class="typ">String</span> name;
+
+    <span class="ann">@Column</span>(nullable = <span class="kw">false</span>, unique = <span class="kw">true</span>)
+    <span class="kw">private</span> <span class="typ">String</span> email;
+
+    <span class="ann">@Column</span>(name = <span class="str">"password_hash"</span>, nullable = <span class="kw">false</span>)
+    <span class="kw">private</span> <span class="typ">String</span> passwordHash;
+
+    <span class="ann">@Enumerated</span>(EnumType.STRING)
+    <span class="kw">private</span> <span class="typ">Role</span> role = <span class="typ">Role</span>.USER;
+}</code></pre>
+        <button class="done-btn" id="btn-step-4-3" onclick="markDone('step-4-3')">✓ このSTEP完了</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ PHASE 5 ═══ -->
+  <div class="phase-section" id="phase-5">
+    <div class="phase-header">
+      <div class="phase-badge p5bg p5">05</div>
+      <div class="phase-title-wrap">
+        <div class="phase-label">Phase 5</div>
+        <div class="phase-title p5">APIを1本ずつ実装する</div>
+      </div>
+    </div>
+
+    <div class="step-card" id="step-5-1">
+      <div class="step-header" onclick="toggleStep('step-5-1')">
+        <div class="step-num p5">STEP 5-1</div>
+        <div class="step-title">会員登録・ログインAPIを実装する</div>
+        <div class="step-time">⏱ 2〜3日</div>
+        <div class="step-toggle">›</div>
+      </div>
+      <div class="step-body">
+        <div class="step-goal">
+          <strong>🎯 ゴール：</strong><code>POST /api/auth/register</code> と <code>POST /api/auth/login</code> が動き、ログイン成功時にJWTトークンが返る状態にする。
+        </div>
+        <div class="step-section-title">実装順序</div>
+        <ol class="step-list">
+          <li><code>pom.xml</code> に <code>jjwt</code>（JWT ライブラリ）の依存を追加する</li>
+          <li><code>UserRepository</code>（JpaRepository を継承）を作成する</li>
+          <li><code>PasswordEncoder</code> Bean を作成し、bcrypt でパスワードをハッシュ化する</li>
+          <li>会員登録 Service・Controller を実装する（バリデーション付き）</li>
+          <li>JWT トークン生成クラスを実装する</li>
+          <li>ログイン Service・Controller を実装する</li>
+        </ol>
+        <div class="code-label">RegisterRequest.java（DTOの例）</div>
+        <pre class="code-block"><code><span class="ann">@Data</span>
+<span class="kw">public class</span> <span class="typ">RegisterRequest</span> {
+    <span class="ann">@NotBlank</span>(message = <span class="str">"名前は必須です"</span>)
+    <span class="ann">@Size</span>(max = <span class="num">100</span>)
+    <span class="kw">private</span> <span class="typ">String</span> name;
+
+    <span class="ann">@NotBlank</span>
+    <span class="ann">@Email</span>(message = <span class="str">"正しいメールアドレスを入力してください"</span>)
+    <span class="kw">private</span> <span class="typ">String</span> email;
+
+    <span class="ann">@NotBlank</span>
+    <span class="ann">@Size</span>(min = <span class="num">8</span>, message = <span class="str">"パスワードは8文字以上です"</span>)
+    <span class="kw">private</span> <span class="typ">String</span> password;
+}</code></pre>
+        <div class="quiz-block">
+          <div class="label">🔰 確認問題</div>
+          <p>JWT のペイロードにはどんな情報を含めますか？パスワードをペイロードに含めてはいけない理由は何ですか？</p>
+        </div>
+        <button class="done-btn" id="btn-step-5-1" onclick="markDone('step-5-1')">✓ このSTEP完了</button>
+      </div>
+    </div>
+
+    <div class="step-card" id="step-5-2">
+      <div class="step-header" onclick="toggleStep('step-5-2')">
+        <div class="step-num p5">STEP 5-2</div>
+        <div class="step-title">商品一覧・商品詳細APIを実装する</div>
+        <div class="step-time">⏱ 2日</div>
+        <div class="step-toggle">›</div>
+      </div>
+      <div class="step-body">
+        <div class="step-goal">
+          <strong>🎯 ゴール：</strong><code>GET /api/products</code>（絞り込み・ページネーション対応）と <code>GET /api/products/{id}</code> が動く状態にする。
+        </div>
+        <div class="step-section-title">実装のポイント</div>
+        <ul class="step-list">
+          <li>Pageable を使ったページネーション（Spring Data JPA の機能）</li>
+          <li><code>Specification</code> を使った動的クエリ（カテゴリ・価格・キーワード絞り込み）</li>
+          <li>論理削除（<code>deleted_at IS NULL</code>）の考慮</li>
+          <li>管理者以外でも認証不要でアクセスできるよう Security 設定を調整する</li>
+        </ul>
+        <div class="code-label">GET /api/products のリクエスト例</div>
+        <pre class="code-block"><code>GET /api/products?category=1&minPrice=100&maxPrice=5000&keyword=シャツ&page=0&size=20</code></pre>
+        <button class="done-btn" id="btn-step-5-2" onclick="markDone('step-5-2')">✓ このSTEP完了</button>
+      </div>
+    </div>
+
+    <div class="step-card" id="step-5-3">
+      <div class="step-header" onclick="toggleStep('step-5-3')">
+        <div class="step-num p5">STEP 5-3</div>
+        <div class="step-title">カート機能を実装する</div>
+        <div class="step-time">⏱ 1.5日</div>
+        <div class="step-toggle">›</div>
+      </div>
+      <div class="step-body">
+        <div class="step-goal">
+          <strong>🎯 ゴール：</strong>カートへの追加・確認・変更・削除APIが動き、在庫数チェックが機能する状態にする。
+        </div>
+        <div class="step-section-title">実装のポイント</div>
+        <ul class="step-list">
+          <li>ログインユーザーのカートを取得・作成する（1ユーザー1カート）</li>
+          <li>追加時に在庫数と数量を比較してエラー制御する</li>
+          <li>小計・合計金額はDBに持たず API レスポンス生成時に計算する</li>
+        </ul>
+        <div class="quiz-block">
+          <div class="label">🔰 確認問題</div>
+          <p>カートに同じ商品を2回追加した場合、どのような動作が適切ですか？「新たなレコードを追加する」「数量を加算する」どちらにするか理由と共に考えてみましょう。</p>
+        </div>
+        <button class="done-btn" id="btn-step-5-3" onclick="markDone('step-5-3')">✓ このSTEP完了</button>
+      </div>
+    </div>
+
+    <div class="step-card" id="step-5-4">
+      <div class="step-header" onclick="toggleStep('step-5-4')">
+        <div class="step-num p5">STEP 5-4</div>
+        <div class="step-title">注文確定APIを実装する（トランザクション処理）</div>
+        <div class="step-time">⏱ 2〜3日</div>
+        <div class="step-toggle">›</div>
+      </div>
+      <div class="step-body">
+        <div class="step-goal">
+          <strong>🎯 ゴール：</strong>注文確定時に「在庫減算」「注文レコード作成」「決済処理」が一つのトランザクションで動く状態にする。
+        </div>
+        <div class="step-section-title">実装の流れ</div>
+        <ol class="step-list">
+          <li>カート内容を取得する</li>
+          <li>在庫の悲観ロック（<code>SELECT FOR UPDATE</code>）で在庫数を確保する</li>
+          <li><code>orders</code> レコードを作成する</li>
+          <li><code>order_items</code> レコードを作成する</li>
+          <li>決済モック処理を実行する</li>
+          <li>決済成功 → 在庫を減算、注文ステータスを <code>CONFIRMED</code> に更新する</li>
+          <li>決済失敗 → 例外を throw してロールバックさせる</li>
+        </ol>
+        <div class="code-label">OrderService.java（骨格）</div>
+        <pre class="code-block"><code><span class="ann">@Service</span>
+<span class="kw">public class</span> <span class="typ">OrderService</span> {
+
+    <span class="ann">@Transactional</span>
+    <span class="kw">public</span> <span class="typ">OrderResponse</span> <span class="fn">placeOrder</span>(<span class="typ">Long</span> userId) {
+        <span class="cm">// 1. カート取得</span>
+        <span class="typ">Cart</span> cart = cartRepository.<span class="fn">findByUserId</span>(userId)
+            .orElseThrow(() -> <span class="kw">new</span> <span class="typ">CartNotFoundException</span>());
+
+        <span class="cm">// 2. 在庫確認・悲観ロック</span>
+        cart.getItems().<span class="fn">forEach</span>(item -> {
+            <span class="typ">Stock</span> stock = stockRepository
+                .<span class="fn">findByProductIdWithLock</span>(item.getProduct().getId())
+                .orElseThrow();
+            <span class="kw">if</span> (stock.getQuantity() < item.getQuantity())
+                <span class="kw">throw new</span> <span class="typ">InsufficientStockException</span>();
+        });
+
+        <span class="cm">// 3-4. 注文・明細作成、5-7. 決済→在庫減算 or ロールバック</span>
+        <span class="cm">// ... 実装を続ける</span>
+    }
+}</code></pre>
+        <div class="quiz-block">
+          <div class="label">🔰 確認問題</div>
+          <p>「悲観ロック」と「楽観ロック」の違いを説明してください。ECサイトの在庫更新にはどちらが向いていますか？理由も答えましょう。</p>
+        </div>
+        <button class="done-btn" id="btn-step-5-4" onclick="markDone('step-5-4')">✓ このSTEP完了</button>
+      </div>
+    </div>
+
+    <div class="step-card" id="step-5-5">
+      <div class="step-header" onclick="toggleStep('step-5-5')">
+        <div class="step-num p5">STEP 5-5</div>
+        <div class="step-title">共通エラーハンドラを実装する</div>
+        <div class="step-time">⏱ 1日</div>
+        <div class="step-toggle">›</div>
+      </div>
+      <div class="step-body">
+        <div class="step-goal">
+          <strong>🎯 ゴール：</strong>全APIで統一されたエラーレスポンス形式が返る状態にする。
+        </div>
+        <div class="code-label">GlobalExceptionHandler.java</div>
+        <pre class="code-block"><code><span class="ann">@RestControllerAdvice</span>
+<span class="kw">public class</span> <span class="typ">GlobalExceptionHandler</span> {
+
+    <span class="ann">@ExceptionHandler</span>(<span class="typ">MethodArgumentNotValidException</span>.class)
+    <span class="ann">@ResponseStatus</span>(<span class="typ">HttpStatus</span>.BAD_REQUEST)
+    <span class="kw">public</span> <span class="typ">ErrorResponse</span> <span class="fn">handleValidation</span>(<span class="typ">MethodArgumentNotValidException</span> ex) {
+        <span class="typ">List</span>&lt;<span class="typ">String</span>&gt; errors = ex.getBindingResult().getFieldErrors()
+            .stream()
+            .map(<span class="typ">FieldError</span>::getDefaultMessage)
+            .collect(<span class="typ">Collectors</span>.toList());
+        <span class="kw">return new</span> <span class="typ">ErrorResponse</span>(<span class="str">"VALIDATION_ERROR"</span>, errors);
+    }
+
+    <span class="ann">@ExceptionHandler</span>(<span class="typ">Exception</span>.class)
+    <span class="ann">@ResponseStatus</span>(<span class="typ">HttpStatus</span>.INTERNAL_SERVER_ERROR)
+    <span class="kw">public</span> <span class="typ">ErrorResponse</span> <span class="fn">handleGeneral</span>(<span class="typ">Exception</span> ex) {
+        <span class="kw">return new</span> <span class="typ">ErrorResponse</span>(<span class="str">"SERVER_ERROR"</span>, ex.getMessage());
+    }
+}</code></pre>
+        <button class="done-btn" id="btn-step-5-5" onclick="markDone('step-5-5')">✓ このSTEP完了</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ PHASE 6 ═══ -->
+  <div class="phase-section" id="phase-6">
+    <div class="phase-header">
+      <div class="phase-badge p6bg p6">06</div>
+      <div class="phase-title-wrap">
+        <div class="phase-label">Phase 6</div>
+        <div class="phase-title p6">テストを書く（JUnit 5）</div>
+      </div>
+    </div>
+
+    <div class="step-card" id="step-6-1">
+      <div class="step-header" onclick="toggleStep('step-6-1')">
+        <div class="step-num p6">STEP 6-1</div>
+        <div class="step-title">Service のユニットテストを書く</div>
+        <div class="step-time">⏱ 1日</div>
+        <div class="step-toggle">›</div>
+      </div>
+      <div class="step-body">
+        <div class="step-goal">
+          <strong>🎯 ゴール：</strong>Mockito を使って Repository をモック化し、Service ロジックのみをテストできる状態にする。
+        </div>
+        <div class="code-label">UserServiceTest.java</div>
+        <pre class="code-block"><code><span class="ann">@ExtendWith</span>(<span class="typ">MockitoExtension</span>.class)
+<span class="kw">class</span> <span class="typ">UserServiceTest</span> {
+
+    <span class="ann">@Mock</span>
+    <span class="kw">private</span> <span class="typ">UserRepository</span> userRepository;
+
+    <span class="ann">@InjectMocks</span>
+    <span class="kw">private</span> <span class="typ">UserService</span> userService;
+
+    <span class="ann">@Test</span>
+    <span class="ann">@DisplayName</span>(<span class="str">"既存メールで登録するとDuplicateEmailExceptionが発生する"</span>)
+    <span class="kw">void</span> <span class="fn">register_duplicateEmail_throwsException</span>() {
+        <span class="cm">// Arrange</span>
+        <span class="fn">when</span>(userRepository.<span class="fn">existsByEmail</span>(<span class="str">"test@example.com"</span>))
+            .<span class="fn">thenReturn</span>(<span class="kw">true</span>);
+
+        <span class="cm">// Act & Assert</span>
+        <span class="fn">assertThrows</span>(
+            <span class="typ">DuplicateEmailException</span>.class,
+            () -> userService.<span class="fn">register</span>(<span class="kw">new</span> <span class="typ">RegisterRequest</span>(<span class="str">"test@example.com"</span>, ...))
+        );
+    }
+}</code></pre>
+        <button class="done-btn" id="btn-step-6-1" onclick="markDone('step-6-1')">✓ このSTEP完了</button>
+      </div>
+    </div>
+
+    <div class="step-card" id="step-6-2">
+      <div class="step-header" onclick="toggleStep('step-6-2')">
+        <div class="step-num p6">STEP 6-2</div>
+        <div class="step-title">MockMvc で Controller のテストを書く</div>
+        <div class="step-time">⏱ 1日</div>
+        <div class="step-toggle">›</div>
+      </div>
+      <div class="step-body">
+        <div class="step-goal">
+          <strong>🎯 ゴール：</strong>HTTP リクエストを模擬して、ステータスコードとレスポンスボディを検証できる状態にする。
+        </div>
+        <div class="code-label">AuthControllerTest.java</div>
+        <pre class="code-block"><code><span class="ann">@WebMvcTest</span>(<span class="typ">AuthController</span>.class)
+<span class="kw">class</span> <span class="typ">AuthControllerTest</span> {
+
+    <span class="ann">@Autowired</span>
+    <span class="kw">private</span> <span class="typ">MockMvc</span> mockMvc;
+
+    <span class="ann">@MockBean</span>
+    <span class="kw">private</span> <span class="typ">UserService</span> userService;
+
+    <span class="ann">@Test</span>
+    <span class="kw">void</span> <span class="fn">register_invalidEmail_returns400</span>() <span class="kw">throws</span> <span class="typ">Exception</span> {
+        mockMvc.<span class="fn">perform</span>(<span class="fn">post</span>(<span class="str">"/api/auth/register"</span>)
+            .<span class="fn">contentType</span>(<span class="typ">MediaType</span>.APPLICATION_JSON)
+            .<span class="fn">content</span>(<span class="str">"{\"name\":\"Test\",\"email\":\"invalid\",\"password\":\"password123\"}"</span>))
+            .<span class="fn">andExpect</span>(<span class="fn">status</span>().<span class="fn">isBadRequest</span>())
+            .<span class="fn">andExpect</span>(<span class="fn">jsonPath</span>(<span class="str">"$.error"</span>).<span class="fn">value</span>(<span class="str">"VALIDATION_ERROR"</span>));
+    }
+}</code></pre>
+        <button class="done-btn" id="btn-step-6-2" onclick="markDone('step-6-2')">✓ このSTEP完了</button>
+      </div>
+    </div>
+
+    <div class="step-card" id="step-6-3">
+      <div class="step-header" onclick="toggleStep('step-6-3')">
+        <div class="step-num p6">STEP 6-3</div>
+        <div class="step-title">注文確定の異常系テストを書く</div>
+        <div class="step-time">⏱ 0.5日</div>
+        <div class="step-toggle">›</div>
+      </div>
+      <div class="step-body">
+        <div class="step-goal">
+          <strong>🎯 ゴール：</strong>在庫不足・決済失敗時にロールバックされることをテストで検証できる状態にする。
+        </div>
+        <div class="step-section-title">テストすべき異常系ケース</div>
+        <ul class="step-list">
+          <li>在庫不足で注文しようとした場合 → <code>InsufficientStockException</code> が throw され、在庫が変化しないこと</li>
+          <li>決済モックが失敗を返した場合 → 注文レコードが作成されず、在庫も変わらないこと</li>
+          <li>未認証のリクエスト → 401 Unauthorized が返ること</li>
+          <li>他人の注文をキャンセルしようとした場合 → 403 Forbidden が返ること</li>
+        </ul>
+        <div class="quiz-block">
+          <div class="label">🔰 確認問題</div>
+          <p>テストで <code>@Transactional</code> アノテーションを付けるとどのような効果がありますか？テストクラスに付けることでどんな問題を防げますか？</p>
+        </div>
+        <button class="done-btn" id="btn-step-6-3" onclick="markDone('step-6-3')">✓ このSTEP完了</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ PHASE 7 ═══ -->
+  <div class="phase-section" id="phase-7">
+    <div class="phase-header">
+      <div class="phase-badge p7bg p7">07</div>
+      <div class="phase-title-wrap">
+        <div class="phase-label">Phase 7</div>
+        <div class="phase-title p7">CI/CDを組む（GitHub Actions）</div>
+      </div>
+    </div>
+
+    <div class="step-card" id="step-7-1">
+      <div class="step-header" onclick="toggleStep('step-7-1')">
+        <div class="step-num p7">STEP 7-1</div>
+        <div class="step-title">CI：push時にテストを自動実行する</div>
+        <div class="step-time">⏱ 1日</div>
+        <div class="step-toggle">›</div>
+      </div>
+      <div class="step-body">
+        <div class="step-goal">
+          <strong>🎯 ゴール：</strong><code>develop</code> ブランチへの push 時に、GitHub Actions でテストが自動実行される状態にする。
+        </div>
+        <div class="code-label">.github/workflows/ci.yml</div>
+        <pre class="code-block"><code>name: CI - Test
+
+on:
+  push:
+    branches: [ develop, feature/** ]
+  pull_request:
+    branches: [ develop, main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'corretto'
+
+      - name: Cache Maven packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+
+      - name: Run tests
+        run: mvn test --no-transfer-progress
+        env:
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}</code></pre>
+        <div class="warn-block">
+          <div class="label">⚠️ Secrets の設定</div>
+          <p>GitHub リポジトリ → Settings → Secrets and variables → Actions で <code>DB_PASSWORD</code> を登録してください。</p>
+        </div>
+        <button class="done-btn" id="btn-step-7-1" onclick="markDone('step-7-1')">✓ このSTEP完了</button>
+      </div>
+    </div>
+
+    <div class="step-card" id="step-7-2">
+      <div class="step-header" onclick="toggleStep('step-7-2')">
+        <div class="step-num p7">STEP 7-2</div>
+        <div class="step-title">CD：JARファイルをビルドしてアーティファクトに保存する</div>
+        <div class="step-time">⏱ 0.5日</div>
+        <div class="step-toggle">›</div>
+      </div>
+      <div class="step-body">
+        <div class="step-goal">
+          <strong>🎯 ゴール：</strong><code>main</code> ブランチへのマージ時に JAR ファイルがビルドされ、GitHub Actions のアーティファクトに保存される状態にする。
+        </div>
+        <div class="code-label">.github/workflows/cd.yml（抜粋）</div>
+        <pre class="code-block"><code>on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'corretto'
+
+      - name: Build JAR
+        run: mvn package -DskipTests --no-transfer-progress
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ec-site-api
+          path: target/*.jar</code></pre>
+        <button class="done-btn" id="btn-step-7-2" onclick="markDone('step-7-2')">✓ このSTEP完了</button>
+      </div>
+    </div>
+
+    <div class="step-card" id="step-7-3">
+      <div class="step-header" onclick="toggleStep('step-7-3')">
+        <div class="step-num p7">STEP 7-3</div>
+        <div class="step-title">CD：SSH で Ubuntu Server に自動デプロイする</div>
+        <div class="step-time">⏱ 1日</div>
+        <div class="step-toggle">›</div>
+      </div>
+      <div class="step-body">
+        <div class="step-goal">
+          <strong>🎯 ゴール：</strong><code>main</code> ブランチへの push 後に、Ubuntu Server 上のアプリが自動で更新・再起動される状態にする。
+        </div>
+        <div class="step-section-title">SSH鍵の準備</div>
+        <ol class="step-list">
+          <li>Ubuntu Server 上で SSH キーペアを生成する</li>
+          <li>公開鍵を <code>~/.ssh/authorized_keys</code> に追加する</li>
+          <li>秘密鍵を GitHub Secrets の <code>SSH_PRIVATE_KEY</code> に登録する</li>
+        </ol>
+        <div class="code-label">.github/workflows/cd.yml（デプロイステップ追加）</div>
+        <pre class="code-block"><code>      - name: Deploy to Ubuntu Server
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /opt/ec-site
+            sudo systemctl stop ec-site-api || true
+            sudo cp ~/ec-site-api.jar /opt/ec-site/app.jar
+            sudo systemctl start ec-site-api
+            sleep 5
+            systemctl is-active ec-site-api</code></pre>
+        <button class="done-btn" id="btn-step-7-3" onclick="markDone('step-7-3')">✓ このSTEP完了</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ PHASE 8 ═══ -->
+  <div class="phase-section" id="phase-8">
+    <div class="phase-header">
+      <div class="phase-badge p8bg p8">08</div>
+      <div class="phase-title-wrap">
+        <div class="phase-label">Phase 8</div>
+        <div class="phase-title p8">Ubuntu Server にデプロイする</div>
+      </div>
+    </div>
+
+    <div class="step-card" id="step-8-1">
+      <div class="step-header" onclick="toggleStep('step-8-1')">
+        <div class="step-num p8">STEP 8-1</div>
+        <div class="step-title">Ubuntu Server に Java をインストールする</div>
+        <div class="step-time">⏱ 30分</div>
+        <div class="step-toggle">›</div>
+      </div>
+      <div class="step-body">
+        <div class="step-goal">
+          <strong>🎯 ゴール：</strong>Ubuntu Server 上で <code>java -version</code> が通り、Java 17 が利用できる状態にする。
+        </div>
+        <div class="code-label">bash（Ubuntu Server）</div>
+        <pre class="code-block"><code>sudo apt update
+sudo apt install -y java-17-amazon-corretto-jdk
+java -version</code></pre>
+        <button class="done-btn" id="btn-step-8-1" onclick="markDone('step-8-1')">✓ このSTEP完了</button>
+      </div>
+    </div>
+
+    <div class="step-card" id="step-8-2">
+      <div class="step-header" onclick="toggleStep('step-8-2')">
+        <div class="step-num p8">STEP 8-2</div>
+        <div class="step-title">systemd サービスとして登録する</div>
+        <div class="step-time">⏱ 30分</div>
+        <div class="step-toggle">›</div>
+      </div>
+      <div class="step-body">
+        <div class="step-goal">
+          <strong>🎯 ゴール：</strong>アプリが systemd サービスとして起動し、サーバー再起動後も自動起動する状態にする。
+        </div>
+        <div class="code-label">/etc/systemd/system/ec-site-api.service</div>
+        <pre class="code-block"><code>[Unit]
+Description=EC Site API
+After=network.target
+
+[Service]
+User=ubuntu
+WorkingDirectory=/opt/ec-site
+ExecStart=/usr/bin/java -jar /opt/ec-site/app.jar
+EnvironmentFile=/opt/ec-site/.env
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target</code></pre>
+        <div class="code-label">bash</div>
+        <pre class="code-block"><code>sudo systemctl daemon-reload
+sudo systemctl enable ec-site-api
+sudo systemctl start ec-site-api
+sudo systemctl status ec-site-api</code></pre>
+        <button class="done-btn" id="btn-step-8-2" onclick="markDone('step-8-2')">✓ このSTEP完了</button>
+      </div>
+    </div>
+
+    <div class="step-card" id="step-8-3">
+      <div class="step-header" onclick="toggleStep('step-8-3')">
+        <div class="step-num p8">STEP 8-3</div>
+        <div class="step-title">動作確認・最終チェック</div>
+        <div class="step-time">⏱ 30分</div>
+        <div class="step-toggle">›</div>
+      </div>
+      <div class="step-body">
+        <div class="step-goal">
+          <strong>🎯 ゴール：</strong>Windows の curl からサーバー上の API に到達し、全機能が正常に動作する状態にする。
+        </div>
+        <div class="step-section-title">Windows から確認</div>
+        <div class="code-label">cmd（Windows）</div>
+        <pre class="code-block"><code><span class="cm"># VirtualBoxのIPを確認（Ubuntu Server側）</span>
+hostname -I
+
+<span class="cm"># Windowsから疎通確認</span>
+curl http://192.168.x.x:8080/api/hello
+
+<span class="cm"># 会員登録テスト</span>
+curl -X POST http://192.168.x.x:8080/api/auth/register ^
+  -H "Content-Type: application/json" ^
+  -d "{\"name\":\"テスト\",\"email\":\"test@example.com\",\"password\":\"password123\"}"</code></pre>
+        <div class="success-block">
+          <div class="label">🎉 完成！</div>
+          <p>全てのSTEPが完了し、CI/CDパイプラインが動作するECサイトAPIのデプロイが成功しました！</p>
+        </div>
+        <div class="quiz-block">
+          <div class="label">🔰 最終振り返り</div>
+          <p>今回の開発を通じて、一番苦労した箇所はどこでしたか？次回はどのように改善しますか？</p>
+        </div>
+        <button class="done-btn" id="btn-step-8-3" onclick="markDone('step-8-3')">✓ このSTEP完了</button>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+const STEPS = [
+  {id:'step-1-1',label:'JDK インストール',phase:1},
+  {id:'step-1-2',label:'Maven インストール',phase:1},
+  {id:'step-1-3',label:'IntelliJ インストール',phase:1},
+  {id:'step-1-4',label:'Git インストール',phase:1},
+  {id:'step-2-1',label:'GitHub リポジトリ作成',phase:2},
+  {id:'step-2-2',label:'ブランチ戦略設定',phase:2},
+  {id:'step-2-3',label:'.gitignore 設定',phase:2},
+  {id:'step-3-1',label:'Spring Initializr',phase:3},
+  {id:'step-3-2',label:'Hello World API',phase:3},
+  {id:'step-3-3',label:'パッケージ構成',phase:3},
+  {id:'step-4-1',label:'Oracle DB セットアップ',phase:4},
+  {id:'step-4-2',label:'DB 接続設定',phase:4},
+  {id:'step-4-3',label:'テーブル作成',phase:4},
+  {id:'step-5-1',label:'認証 API 実装',phase:5},
+  {id:'step-5-2',label:'商品 API 実装',phase:5},
+  {id:'step-5-3',label:'カート API 実装',phase:5},
+  {id:'step-5-4',label:'注文 API 実装',phase:5},
+  {id:'step-5-5',label:'エラーハンドラ',phase:5},
+  {id:'step-6-1',label:'Service テスト',phase:6},
+  {id:'step-6-2',label:'Controller テスト',phase:6},
+  {id:'step-6-3',label:'異常系テスト',phase:6},
+  {id:'step-7-1',label:'CI 設定',phase:7},
+  {id:'step-7-2',label:'CD ビルド',phase:7},
+  {id:'step-7-3',label:'CD デプロイ',phase:7},
+  {id:'step-8-1',label:'Ubuntu Java 設定',phase:8},
+  {id:'step-8-2',label:'systemd 登録',phase:8},
+  {id:'step-8-3',label:'動作確認',phase:8},
+];
+
+const PHASE_NAMES = [
+  '','開発環境を整える','GitHubを設定する','Spring Bootを始める',
+  'Oracle DBに接続する','APIを実装する','テストを書く','CI/CDを組む','デプロイする'
+];
+const PHASE_COLORS = ['','#58a6ff','#3fb950','#f78166','#d2a8ff','#ffa657','#79c0ff','#56d364','#ff7b72'];
+
+let done = JSON.parse(localStorage.getItem('ec-guide-done') || '{}');
+
+function buildNav() {
+  const nav = document.getElementById('nav-list');
+  let currentPhase = 0;
+  STEPS.forEach(s => {
+    if (s.phase !== currentPhase) {
+      currentPhase = s.phase;
+      const ph = document.createElement('div');
+      ph.className = 'nav-phase';
+      const dot = document.createElement('span');
+      dot.className = 'nav-phase-dot';
+      dot.style.background = PHASE_COLORS[s.phase];
+      ph.appendChild(dot);
+      ph.appendChild(document.createTextNode('Phase ' + s.phase));
+      nav.appendChild(ph);
+    }
+    const item = document.createElement('div');
+    item.className = 'nav-step' + (done[s.id] ? ' done' : '');
+    item.id = 'nav-' + s.id;
+    item.textContent = s.label;
+    item.onclick = () => {
+      document.getElementById(s.id)?.scrollIntoView({behavior:'smooth', block:'start'});
+    };
+    nav.appendChild(item);
+  });
+}
+
+function updateProgress() {
+  const total = STEPS.length;
+  const doneCount = STEPS.filter(s => done[s.id]).length;
+  const pct = Math.round(doneCount / total * 100);
+  document.getElementById('progress-pct').textContent = pct + '%';
+  document.getElementById('progress-fill').style.width = pct + '%';
+}
+
+function toggleStep(id) {
+  const card = document.getElementById(id);
+  card.classList.toggle('open');
+}
+
+function markDone(id) {
+  done[id] = true;
+  try { localStorage.setItem('ec-guide-done', JSON.stringify(done)); } catch(e){}
+  const btn = document.getElementById('btn-' + id);
+  if (btn) { btn.textContent = '✓ 完了済み'; btn.classList.add('completed'); btn.disabled = true; }
+  const nav = document.getElementById('nav-' + id);
+  if (nav) nav.classList.add('done');
+  updateProgress();
+}
+
+// restore done state
+function restoreDone() {
+  STEPS.forEach(s => {
+    if (done[s.id]) {
+      const btn = document.getElementById('btn-' + s.id);
+      if (btn) { btn.textContent = '✓ 完了済み'; btn.classList.add('completed'); btn.disabled = true; }
+    }
+  });
+}
+
+buildNav();
+restoreDone();
+updateProgress();
+
+// Intersection observer for active nav highlight
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      document.querySelectorAll('.nav-step').forEach(n => n.classList.remove('active'));
+      const navItem = document.getElementById('nav-' + e.target.id);
+      if (navItem) navItem.classList.add('active');
+    }
+  });
+}, {threshold: 0.3});
+
+STEPS.forEach(s => {
+  const el = document.getElementById(s.id);
+  if (el) observer.observe(el);
+});
+</script>
+</body>
+</html>
