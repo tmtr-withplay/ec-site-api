@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<title>EC バックエンド API 開発ロードマップ（学習用・図解付き・技術書スタイル）</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<style>
+body { font-family: "Yu Gothic", "Segoe UI", sans-serif; line-height:1.7; padding:32px; max-width:1100px; margin:auto; color:#222; }
+h1,h2,h3,h4 { color:#0a7; }
+h1 { border-bottom:2px solid #0a7; padding-bottom:8px; }
+h2 { border-bottom:1px solid #ccc; padding-bottom:4px; margin-top:32px; }
+pre { background:#f6f8fa; padding:12px; border-radius:6px; overflow:auto; font-size:0.9em; }
+code { font-family: Consolas, monospace; }
+.note { background:#fff8e1; border-left:4px solid #ffb300; padding:12px; margin:16px 0; }
+.small { font-size:0.9em; color:#555; }
+.figure { border:1px solid #ccc; padding:12px; margin:16px 0; background:#fafafa; }
+.figure-title { font-weight:bold; margin-bottom:4px; }
+ol,ul { margin-left:1.2em; }
+</style>
+</head>
+<body>
+
+<h1>EC バックエンド API 開発ロードマップ（図解付き・学習用）</h1>
+<p class="small">
+本書は、Windows 11 上で Spring Boot（Java / Amazon Corretto 21）を用いて EC バックエンド API を開発し、<br/>
+VirtualBox 上の Ubuntu Server（SSH ポート 8022）へ GitHub Actions で CI/CD デプロイするまでの流れを、<br/>
+「OS ユーザー分離」「DB ユーザー分離」「リバースプロキシ（Nginx/Apache）」を含めて体系的に学ぶための技術書スタイルのドキュメントです。
+</p>
+
+<div class="note">
+<strong>読み方のガイド：</strong><br/>
+第 1 章〜第 3 章で環境とユーザー設計を理解し、<br/>
+第 4 章〜第 6 章でアプリとインフラの連携、<br/>
+第 7 章〜第 8 章で CI/CD と運用の全体像を掴む構成になっています。
+</div>
+
+<hr/>
+
+<h2>第 1 章　全体アーキテクチャ</h2>
+
+<h3>1.1 システム全体像</h3>
+
+<div class="figure">
+<div class="figure-title">図 1-1　全体アーキテクチャ図</div>
+<pre><code>+-------------------+         +---------------------------+
+|   開発者 PC       |         |   GitHub (リポジトリ)    |
+|  Windows 11       |         |   GitHub Actions         |
+|  IntelliJ + Maven |         |   (CI/CD パイプライン)   |
++---------+---------+         +-------------+-------------+
+          | push                             |
+          |                                   |
+          v                                   v
+   (1) コード開発                     (2) ビルド & テスト
+                                        |
+                                        | SSH (ポート 8022)
+                                        v
+                             +----------+-----------+
+                             |  Ubuntu Server       |
+                             |  (VirtualBox 上)     |
+                             +----------+-----------+
+                                        |
+                                        | systemd (ecapp サービス)
+                                        v
+                             +----------+-----------+
+                             | Spring Boot アプリ   |
+                             | (Corretto 21, 8080)  |
+                             +----------+-----------+
+                                        |
+                                        v
+                             +----------+-----------+
+                             | PostgreSQL (5432)    |
+                             +----------------------+
+
+外部ユーザー
+    |
+    v
++-----------+      リバースプロキシ      +---------------------+
+| ブラウザ  |  <---------------------->  | Nginx / Apache (80/443) |
++-----------+                            +---------------------+
+</code></pre>
+</div>
+
+<p>
+この図は、開発者の PC から GitHub、Ubuntu Server、Spring Boot アプリ、PostgreSQL、そして Nginx/Apache を経由してブラウザからアクセスされるまでの流れを表しています。<br/>
+ポイントは「開発環境」「CI/CD」「本番サーバー」「アプリ」「DB」「リバースプロキシ」が役割ごとに分かれていることです。
+</p>
+
+<hr/>
+
+<h2>第 2 章　OS ユーザー設計</h2>
+
+<h3>2.1 OS ユーザー分離の目的</h3>
+<ul>
+  <li>アプリが侵害されても、サーバー全体への被害を最小化する</li>
+  <li>デプロイ操作とアプリ実行を分離し、責務を明確にする</li>
+  <li>ログやファイルの所有者を分けて、運用・監査をしやすくする</li>
+</ul>
+
+<div class="figure">
+<div class="figure-title">図 2-1　OS ユーザー構成図</div>
+<pre><code>+------------------+      +------------------+      +------------------+
+|  admin (初期)    |      |  deploy          |      |  ecapp           |
+|  sudo 権限あり   |      |  デプロイ専用    |      |  アプリ実行専用  |
++---------+--------+      +---------+--------+      +---------+--------+
+          |                       |                       |
+          | 管理作業              | SSH 8022 で接続       | systemd からのみ実行
+          v                       v                       v
+   OS 設定変更・                  デプロイ用ディレクトリ  Spring Boot アプリ
+   パッケージ導入                 への jar 配置           のプロセス実行
+</code></pre>
+</div>
+
+<h3>2.2 ユーザー作成手順</h3>
+
+<h4>2.2.1 デプロイ用ユーザー（deploy）</h4>
+<pre><code>sudo adduser deploy
+sudo usermod -aG sudo deploy
+</code></pre>
+
+<h4>2.2.2 アプリ実行専用ユーザー（ecapp）</h4>
+<pre><code>sudo adduser ecapp --disabled-password --shell /usr/sbin/nologin
+sudo mkdir -p /home/ecapp/app
+sudo chown -R ecapp:ecapp /home/ecapp/app
+</code></pre>
+
+<div class="note">
+<strong>ポイント：</strong><br/>
+ecapp ユーザーは SSH ログイン不可にし、systemd からのみアプリを実行させることで、<br/>
+「アプリ実行権限」と「サーバー操作権限」を明確に分離します。
+</div>
+
+<hr/>
+
+<h2>第 3 章　DB ユーザー設計</h2>
+
+<h3>3.1 DB ユーザー分離の目的</h3>
+<ul>
+  <li>アプリからは最小限の権限（SELECT/INSERT/UPDATE/DELETE）のみを付与する</li>
+  <li>DB 管理者（postgres）とアプリユーザーを分けて、誤操作や侵害時の被害を抑える</li>
+</ul>
+
+<div class="figure">
+<div class="figure-title">図 3-1　DB ユーザー権限図</div>
+<pre><code>+------------------+          +------------------+
+| postgres         |          | ecapp_user       |
+| DB 管理者        |          | アプリ専用       |
++---------+--------+          +---------+--------+
+          |                             |
+          | CREATE DATABASE / 管理      | SELECT / INSERT / UPDATE / DELETE
+          v                             v
+                 +----------------------+
+                 |   ecapp_db           |
+                 +----------------------+
+
+Spring Boot アプリ
+        |
+        v
+  ecapp_user 経由で ecapp_db に接続
+</code></pre>
+</div>
+
+<h3>3.2 DB ユーザー作成手順</h3>
+
+<pre><code>sudo -u postgres psql
+
+-- アプリ専用ユーザー
+CREATE USER ecapp_user WITH PASSWORD '強いパスワード';
+
+-- アプリ用データベース
+CREATE DATABASE ecapp_db OWNER ecapp_user;
+
+-- 公開権限を削除し、アプリユーザーにのみ接続を許可
+REVOKE ALL ON DATABASE ecapp_db FROM PUBLIC;
+GRANT CONNECT ON DATABASE ecapp_db TO ecapp_user;
+</code></pre>
+
+<div class="note">
+<strong>学習ポイント：</strong><br/>
+アプリからは決して postgres ユーザーで接続しないこと。<br/>
+これは「root でアプリを動かさない」のと同じくらい重要な原則です。
+</div>
+
+<hr/>
+
+<h2>第 4 章　ネットワークとリバースプロキシ</h2>
+
+<h3>4.1 ネットワーク構成</h3>
+
+<div class="figure">
+<div class="figure-title">図 4-1　ネットワーク構成図</div>
+<pre><code>インターネット
+    |
+    v
++-----------+        +---------------------+        +----------------------+
+| ブラウザ  | -----> | Nginx / Apache      | -----> | Spring Boot (8080)   |
++-----------+ 80/443 | (80/443)            |        | (Corretto 21)        |
+                     +---------------------+        +----------+-----------+
+                                                              |
+                                                              v
+                                                      +-------+--------+
+                                                      | PostgreSQL     |
+                                                      | (5432)         |
+                                                      +----------------+
+
+GitHub Actions
+    |
+    | SSH (ポート 8022)
+    v
+Ubuntu Server (deploy ユーザー)
+</code></pre>
+</div>
+
+<h3>4.2 Nginx を使う目的</h3>
+<ul>
+  <li>HTTPS（TLS）の終端を担当し、アプリは HTTP のままでよい</li>
+  <li>外部公開ポート（80/443）を一箇所に集約し、セキュリティを高める</li>
+  <li>静的ファイルを高速に配信できる</li>
+  <li>将来的に複数アプリへの負荷分散も可能</li>
+</ul>
+
+<h3>4.3 Nginx 設定例</h3>
+<pre><code>sudo apt install -y nginx
+
+sudo nano /etc/nginx/sites-available/ecapp
+
+server {
+    listen 80;
+    server_name _;
+
+    location / {
+        proxy_pass http://localhost:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}
+
+sudo ln -s /etc/nginx/sites-available/ecapp /etc/nginx/sites-enabled/ecapp
+sudo nginx -t
+sudo systemctl restart nginx
+</code></pre>
+
+<h3>4.4 Apache での代替</h3>
+<p>
+Apache でも mod_proxy を使えば同様のリバースプロキシ構成が可能です。<br/>
+ただし、設定ファイルやモジュール構成がやや複雑になりがちで、学習コストを考えると Nginx から入る方が理解しやすいケースが多いです。
+</p>
+
+<hr/>
+
+<h2>第 5 章　開発環境（Windows 11）構築</h2>
+
+<h3>5.1 Amazon Corretto 21 の導入</h3>
+<pre><code>java -version
+# → openjdk version "21" ... (Corretto)
+</code></pre>
+
+<h3>5.2 Maven 手動インストール</h3>
+<pre><code># 1. ダウンロード
+https://maven.apache.org/download.cgi
+
+# 2. 展開例
+C:\tools\apache-maven-3.9.x
+
+# 3. 環境変数
+M2_HOME=C:\tools\apache-maven-3.9.x
+PATH=%M2_HOME%\bin
+
+# 4. 動作確認
+mvn -v
+</code></pre>
+
+<h3>5.3 IntelliJ IDEA 設定</h3>
+<ul>
+  <li>Project SDK：Corretto 21</li>
+  <li>Maven home：外部 Maven（C:\tools\apache-maven-3.9.x）</li>
+</ul>
+
+<h3>5.4 A5 Mk-2 SQL で PostgreSQL に接続</h3>
+<pre><code>Host: (Ubuntu Server の IP アドレス)
+Port: 5432
+Database: ecapp_db
+User: ecapp_user
+Password: (設定したパスワード)
+</code></pre>
+
+<hr/>
+
+<h2>第 6 章　Spring Boot アプリ設計</h2>
+
+<h3>6.1 レイヤ構成</h3>
+<pre><code>com.example.ecapp
+├─ Application.java
+├─ config        # セキュリティ・Swagger・DB 設定
+├─ controller    # REST API エンドポイント
+├─ service       # ビジネスロジック
+├─ repository    # DB アクセス (Spring Data JPA)
+├─ entity        # JPA エンティティ
+├─ dto           # リクエスト/レスポンス DTO
+└─ exception     # 例外・エラーハンドリング
+</code></pre>
+
+<h3>6.2 重要な設計ポイント</h3>
+<ul>
+  <li>JWT 認証（Authorization: Bearer &lt;token&gt;）</li>
+  <li>BCrypt によるパスワードハッシュ</li>
+  <li>@Transactional による注文確定＋在庫更新＋決済モックの一括処理</li>
+  <li>決済失敗時は例外を投げてロールバック</li>
+  <li>@ControllerAdvice による統一エラーレスポンス</li>
+</ul>
+
+<hr/>
+
+<h2>第 7 章　systemd による常駐化</h2>
+
+<h3>7.1 サービスファイル</h3>
+<pre><code>sudo nano /etc/systemd/system/ecapp.service
+
+[Unit]
+Description=EC App
+After=network.target
+
+[Service]
+User=ecapp
+WorkingDirectory=/home/ecapp/app
+ExecStart=/usr/bin/java -jar app.jar --spring.profiles.active=prod
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+</code></pre>
+
+<pre><code>sudo systemctl daemon-reload
+sudo systemctl enable ecapp
+sudo systemctl start ecapp
+sudo systemctl status ecapp
+</code></pre>
+
+<div class="note">
+<strong>学習ポイント：</strong><br/>
+systemd によって、サーバー再起動後も自動的にアプリが起動し、<br/>
+異常終了時には自動再起動されるようになります。
+</div>
+
+<hr/>
+
+<h2>第 8 章　CI/CD（GitHub Actions）</h2>
+
+<h3>8.1 CI/CD フロー図</h3>
+
+<div class="figure">
+<div class="figure-title">図 8-1　CI/CD シーケンス図</div>
+<pre><code>開発者          GitHub Actions          Ubuntu Server          systemd
+  |                   |                       |                    |
+  |  git push         |                       |                    |
+  |------------------&gt;|                       |                    |
+  |                   |  ビルド & テスト      |                    |
+  |                   |----------------------&gt;|                    |
+  |                   |                       |                    |
+  |                   |  SSH (8022, deploy)   |                    |
+  |                   |----------------------&gt;|                    |
+  |                   |                       |  app.jar 更新      |
+  |                   |                       |-------------------&gt;|
+  |                   |                       |                    |  再起動
+  |                   |                       |                    |
+</code></pre>
+</div>
+
+<h3>8.2 Secrets 設定</h3>
+<ul>
+  <li>SERVER_HOST：Ubuntu Server の IP アドレス</li>
+  <li>SERVER_USER：deploy</li>
+  <li>SERVER_SSH_KEY：deploy ユーザーの秘密鍵</li>
+  <li>SERVER_SSH_PORT：8022</li>
+</ul>
+
+<h3>8.3 ワークフロー例</h3>
+<pre><code name="yaml">name: CI-CD
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK 21 (Corretto)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'corretto'
+          java-version: '21'
+      - name: Build with Maven
+        run: mvn -B clean package
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Copy jar & restart service
+        uses: appleboy/ssh-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: ${{ secrets.SERVER_SSH_PORT }}
+          script: |
+            set -e
+            cd /home/deploy
+            # ここでは GitHub から scp で jar を送る構成などに合わせて調整
+            # 例: /home/ecapp/app/app.jar を更新
+            sudo systemctl restart ecapp
+</code></pre>
+
+<hr/>
+
+<h2>第 9 章　学習のためのまとめ</h2>
+
+<ul>
+  <li>OS ユーザー分離（admin / deploy / ecapp）で責務と権限を分ける</li>
+  <li>DB ユーザー分離（postgres / ecapp_user）で最小権限を徹底する</li>
+  <li>Corretto 21・Maven・IntelliJ を揃えて、開発と本番の差異を減らす</li>
+  <li>Nginx/Apache をリバースプロキシとして使い、HTTPS と公開ポートを一元管理する</li>
+  <li>systemd でアプリを常駐化し、再起動や障害時の復旧を自動化する</li>
+  <li>GitHub Actions でビルド〜デプロイを自動化し、変更を安全かつ素早く反映する</li>
+</ul>
+
+<p class="small">
+このドキュメントを PDF として保存するには、ブラウザで本ファイルを開き、<br/>
+「印刷」→「PDF に保存」を選択してください。図解と章立てがそのまま PDF に反映されます。
+</p>
+
+<footer>
+<hr/>
+<p class="small">作成者：ベテラン SE（学習用・技術書スタイルの構成）</p>
+</footer>
+
+</body>
+</html>

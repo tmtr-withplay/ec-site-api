@@ -1,0 +1,402 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>ECサイト（バックエンドAPI）開発ロードマップ</title>
+  <style>
+    body { font-family: "Helvetica Neue", Arial, sans-serif; line-height:1.6; color:#222; padding:24px; max-width:1100px; margin:auto; }
+    h1,h2,h3,h4 { color:#0b5; margin-top:1.2em; }
+    pre { background:#f6f8fa; padding:12px; border-radius:6px; overflow:auto; }
+    code { font-family: monospace; }
+    .note { background:#fff8e1; border-left:4px solid #ffb300; padding:10px; margin:12px 0; }
+    .checklist li { margin:6px 0; }
+    .small { font-size:0.9em; color:#555; }
+    table { border-collapse:collapse; width:100%; margin:12px 0; }
+    th,td { border:1px solid #ddd; padding:8px; text-align:left; }
+    .kbd { background:#eee; border-radius:4px; padding:2px 6px; font-family:monospace; }
+  </style>
+</head>
+<body>
+
+<h1>ECサイト（バックエンドAPI）開発ロードマップ</h1>
+
+<p class="small">対象：シンプルなECサイトのバックエンドAPI（RESTful）を、Windows 11 開発環境 → VirtualBox 上の Ubuntu Server（GUIなし）へ GitHub Actions を使って CI/CD デプロイする一連の手順と解説。</p>
+
+<section>
+  <h2>前提（要件抜粋）</h2>
+  <p>このロードマップは、依頼書に基づいて作成しています。以下は依頼書の要旨です：</p>
+  <blockquote>
+    <p>シンプルなECサイト バックエンドAPI</p>
+    <p>RESTful API設計・DB設計・トランザクション処理・セキュリティ・ドキュメント整備など、実務で求められる能力を総合的に評価します。</p>
+  </blockquote>
+  <p class="small">（上記は依頼書からの抜粋です）。</p>
+</section>
+
+<hr/>
+
+<section>
+  <h2>全体ロードマップ（フェーズ別）</h2>
+  <ol>
+    <li><strong>準備フェーズ</strong>（環境・ツールの導入）</li>
+    <li><strong>設計フェーズ</strong>（API設計・DB設計・認可設計）</li>
+    <li><strong>実装フェーズ</strong>（Spring Boot アプリ開発・ユニットテスト）</li>
+    <li><strong>CI/CD 構築フェーズ</strong>（GitHub Actions → Ubuntu Server デプロイ）</li>
+    <li><strong>検証・ドキュメント化フェーズ</strong>（Swagger・README・評価基準対応）</li>
+  </ol>
+  <p class="small">各フェーズは並行作業が可能ですが、設計を固めてから実装・CIを進めると手戻りが少なくなります。</p>
+</section>
+
+<hr/>
+
+<section>
+  <h2>1 準備フェーズ（開発環境）</h2>
+
+  <h3>1.1 必須ソフトウェア（Windows 11 開発機）</h3>
+  <ul>
+    <li><strong>Java</strong>：Amazon Corretto 17（開発・本番で同一バージョンを使用）</li>
+    <li><strong>Build</strong>：Maven（プロジェクト管理・ビルド）</li>
+    <li><strong>IDE</strong>：IntelliJ IDEA（Community で十分）</li>
+    <li><strong>DB クライアント</strong>：pgAdmin / DBeaver（PostgreSQL 接続用）</li>
+    <li><strong>Git</strong>：Git for Windows</li>
+    <li><strong>VirtualBox</strong>：Ubuntu Server を動かすため</li>
+  </ul>
+
+  <h4>1.1.1 Amazon Corretto の導入（Windows）</h4>
+  <p>理由：OpenJDK 互換で商用利用に安心、長期サポートがあるため本番と開発で同一環境を揃えやすい。</p>
+  <pre><code># ダウンロード・インストール（例）
+1. https://aws.amazon.com/corretto/ から MSI をダウンロード
+2. インストーラを実行して PATH に追加
+3. 動作確認:
+> java -version
+</code></pre>
+
+  <h4>1.1.2 Maven と IntelliJ の設定</h4>
+  <p>IntelliJ は Maven プロジェクトを直接インポートできます。JDK を Corretto に設定してください。</p>
+
+  <h3>1.2 Ubuntu Server（VirtualBox）準備</h3>
+  <ol>
+    <li>VirtualBox に Ubuntu Server をインストール（最小構成、GUIなし）。</li>
+    <li>SSH を有効化し、ホストとポートフォワード（例：ホスト 2222 → ゲスト 22）を設定。</li>
+    <li>Ubuntu に Corretto、PostgreSQL、Nginx（リバースプロキシ）をインストール。</li>
+  </ol>
+
+  <pre><code># Ubuntu 側の基本コマンド（例）
+sudo apt update && sudo apt upgrade -y
+# Corretto (例: 17)
+sudo apt install -y wget
+wget https://corretto.aws/downloads/latest/amazon-corretto-17-x64-linux-jdk.deb
+sudo dpkg -i amazon-corretto-17-*-linux-x64.deb
+java -version
+
+# PostgreSQL
+sudo apt install -y postgresql postgresql-contrib
+
+# Nginx (リバースプロキシ)
+sudo apt install -y nginx
+</code></pre>
+
+  <div class="note"><strong>注意：</strong>本番と同じ Java / PostgreSQL バージョンを開発環境にも揃えること（差異がバグの原因になります）。</div>
+</section>
+
+<hr/>
+
+<section>
+  <h2>2 設計フェーズ（必須設計項目と解説）</h2>
+
+  <h3>2.1 API 設計（RESTful）</h3>
+  <p>設計方針（要点）：</p>
+  <ul>
+    <li>リソース指向：動詞を使わない（例：<code>/products</code>, <code>/orders</code>）。</li>
+    <li>HTTP メソッドの適切な利用：GET/POST/PATCH/DELETE/PUT。</li>
+    <li>認証不要は最小限（要件では商品一覧のみ認証不要）。</li>
+    <li>ページネーション：limit/offset（クエリパラメータ）。</li>
+    <li>エラーフォーマット統一：<code>{ "error": "...", "message": "..." }</code>。</li>
+  </ul>
+
+  <h4>代表的なエンドポイント（抜粋）</h4>
+  <table>
+    <tr><th>メソッド</th><th>パス</th><th>説明</th></tr>
+    <tr><td>POST</td><td>/api/v1/auth/register</td><td>会員登録</td></tr>
+    <tr><td>POST</td><td>/api/v1/auth/login</td><td>ログイン（JWT 発行）</td></tr>
+    <tr><td>GET</td><td>/api/v1/products</td><td>商品一覧（認証不要）</td></tr>
+    <tr><td>POST</td><td>/api/v1/orders</td><td>注文確定（トランザクション内で在庫更新・決済）</td></tr>
+  </table>
+
+  <h3>2.2 DB 設計（PostgreSQL）</h3>
+  <p>依頼書の ER をベースに、正規化・インデックス・制約を設計します。主なポイント：</p>
+  <ul>
+    <li><strong>users</strong>：email に UNIQUE、password はハッシュ（bcrypt）</li>
+    <li><strong>products</strong>：deleted_at による論理削除、price は DECIMAL</li>
+    <li><strong>stocks</strong>：product_id に UNIQUE、在庫は CHECK (quantity &gt;= 0)</li>
+    <li><strong>orders / order_items</strong>：注文確定時に在庫を減算、order_items に unit_price を保持</li>
+    <li>インデックス：products(category_id), products(price), orders(user_id, created_at)</li>
+  </ul>
+
+  <h4>マイグレーション</h4>
+  <p>Flyway または Liquibase を導入してマイグレーション管理を行うことを推奨。</p>
+</section>
+
+<hr/>
+
+<section>
+  <h2>3 実装フェーズ（Spring Boot + Maven）</h2>
+
+  <h3>3.1 プロジェクト構成（推奨）</h3>
+  <pre><code>com.example.ec
+├─ Application.java
+├─ config
+│  ├─ SecurityConfig.java   # JWT, password encoder
+│  └─ SwaggerConfig.java
+├─ controller
+├─ service
+├─ repository
+├─ dto
+├─ entity
+└─ exception
+</code></pre>
+
+  <h3>3.2 主要技術ポイント（実装上の注意）</h3>
+  <ul>
+    <li><strong>認証</strong>：JWT（アクセストークンに有効期限を設定）。ログアウトはトークン無効化（ブラックリスト or token version）。</li>
+    <li><strong>パスワード</strong>：BCryptPasswordEncoder を使用してハッシュ化。</li>
+    <li><strong>トランザクション</strong>：注文確定処理は @Transactional（REQUIRED）で在庫減算・注文作成・決済呼び出しを同一トランザクションで実行。</li>
+    <li><strong>決済モック</strong>：外部 API を想定したサービスを作成し、成功/残高不足/エラー の3パターンを返す。決済失敗時は例外を投げてロールバック。</li>
+    <li><strong>例外処理</strong>：@ControllerAdvice で統一エラーフォーマットを返す。</li>
+    <li><strong>DB アクセス</strong>：Spring Data JPA（プレースホルダ/ORM）で SQL インジェクション対策。</li>
+    <li><strong>パフォーマンス</strong>：商品一覧は必要なカラムのみ SELECT、カテゴリ・価格にインデックス、N+1 を防ぐため fetch join を活用。</li>
+  </ul>
+
+  <h3>3.3 ユニットテスト</h3>
+  <p>必須：認証・注文確定（正常/在庫不足/決済失敗）・在庫更新のテスト。JUnit + Mockito を使用。</p>
+
+  <pre><code>// 例: 注文確定のテスト（擬似コード）
+@Test
+void placeOrder_success() {
+  // arrange: モック在庫 10, カート 2 個
+  // act: POST /api/v1/orders
+  // assert: ステータス 201, 在庫が 8 に減る, payment.status == success
+}
+</code></pre>
+</section>
+
+<hr/>
+
+<section>
+  <h2>4 CI/CD（GitHub Actions → Ubuntu Server）</h2>
+
+  <h3>4.1 方針</h3>
+  <p>GitHub Actions でビルド・テスト・パッケージング（jar）を実行し、成功したら Ubuntu Server（VirtualBox ゲスト）へ SSH でデプロイ。デプロイ後は systemd サービスでアプリを起動。</p>
+
+  <h3>4.2 GitHub Actions ワークフロー（例）</h3>
+  <pre><code name="yaml">name: CI-CD
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'corretto'
+          java-version: '17'
+      - name: Cache Maven packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+      - name: Build with Maven
+        run: mvn -B clean package -DskipTests=false
+
+  deploy:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-jar
+          path: target/*.jar
+      - name: Deploy to server
+        uses: appleboy/ssh-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: ${{ secrets.SERVER_SSH_PORT }}
+          script: |
+            set -e
+            mkdir -p ~/deploys/ec-app
+            rm -f ~/deploys/ec-app/app.jar
+            scp -P ${{ secrets.SERVER_SSH_PORT }} ./target/*.jar ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:~/deploys/ec-app/app.jar
+            # restart systemd service
+            sudo systemctl daemon-reload
+            sudo systemctl restart ec-app.service
+</code></pre>
+
+  <p class="small">注：上記では <code>appleboy/ssh-action</code> を例示しています。実際にはセキュリティポリシーに従い、秘密鍵は GitHub Secrets に登録してください。</p>
+
+  <h3>4.3 Ubuntu 側デプロイ手順（受け取り側）</h3>
+  <pre><code># サーバー側（Ubuntu）での準備（初回のみ）
+# 1. デプロイ用ユーザー作成（例: deploy）
+sudo adduser deploy
+sudo usermod -aG sudo deploy
+
+# 2. systemd サービス定義
+sudo tee /etc/systemd/system/ec-app.service > /dev/null <<'EOF'
+[Unit]
+Description=EC App
+After=network.target
+
+[Service]
+User=deploy
+WorkingDirectory=/home/deploy/deploys/ec-app
+ExecStart=/usr/bin/java -jar /home/deploy/deploys/ec-app/app.jar --spring.profiles.active=prod
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable ec-app.service
+sudo systemctl start ec-app.service
+</code></pre>
+
+  <div class="note"><strong>セキュリティ：</strong>SSH 鍵はパスフレーズ付きで管理し、GitHub Secrets に登録。サーバーのファイアウォール（ufw）で必要ポートのみ開放。</div>
+</section>
+
+<hr/>
+
+<section>
+  <h2>5 運用・品質・セキュリティ</h2>
+
+  <h3>5.1 セキュリティ対策（必須）</h3>
+  <ul>
+    <li>パスワードは必ず bcrypt でハッシュ化。</li>
+    <li>JWT の署名鍵は環境変数で管理（秘密鍵はリポジトリに置かない）。</li>
+    <li>SQL は ORM（JPA）を使い、プレースホルダを利用。</li>
+    <li>HTTPS：本番では Nginx で TLS 終端（Let's Encrypt）を設定。</li>
+    <li>ログに機密情報（パスワード、カード番号）は絶対に出力しない。</li>
+  </ul>
+
+  <h3>5.2 ロギング・監視</h3>
+  <ul>
+    <li>ログ：Logback を利用し、INFO/ERROR を分けて出力。</li>
+    <li>監視：Prometheus + Grafana（将来的に）または簡易に systemd の再起動監視。</li>
+  </ul>
+
+  <h3>5.3 バックアップ</h3>
+  <p>PostgreSQL の定期バックアップ（pg_dump）を cron で実行し、外部ストレージへ保存。</p>
+</section>
+
+<hr/>
+
+<section>
+  <h2>6 ドキュメント・テスト・評価対応</h2>
+
+  <h3>6.1 API ドキュメント</h3>
+  <p>OpenAPI（Swagger）を導入し、全エンドポイントを網羅。Swagger UI を /swagger-ui.html で公開（認証付きにするか、開発環境のみ公開）。</p>
+
+  <h3>6.2 README に含めるべき内容（必須）</h3>
+  <ul>
+    <li>プロジェクトの目的と範囲</li>
+    <li>前提条件（JDK, Maven, PostgreSQL バージョン）</li>
+    <li>ローカル起動手順（DB マイグレーション含む）</li>
+    <li>テスト実行方法（mvn test）</li>
+    <li>CI/CD の流れ（GitHub Actions の説明）</li>
+    <li>評価基準への対応箇所（設計・トランザクション・テスト等）</li>
+  </ul>
+
+  <h3>6.3 評価基準へのマッピング（短縮）</h3>
+  <table>
+    <tr><th>評価項目</th><th>実装での対応箇所</th></tr>
+    <tr><td>RESTful URL設計</td><td>controller パッケージのエンドポイント設計</td></tr>
+    <tr><td>トランザクション処理</td><td>@Transactional を使った OrderService</td></tr>
+    <tr><td>ユニットテスト</td><td>認証・注文・在庫のテストクラス</td></tr>
+    <tr><td>ドキュメント</td><td>Swagger + README</td></tr>
+  </table>
+</section>
+
+<hr/>
+
+<section>
+  <h2>7 チェックリスト（納品前）</h2>
+  <ul class="checklist">
+    <li>全エンドポイントの Swagger ドキュメントが存在する</li>
+    <li>主要ユニットテスト（正常/異常）が通る（CI で自動実行）</li>
+    <li>注文確定処理は同一トランザクションで在庫更新・決済を行い、決済失敗でロールバックされる</li>
+    <li>パスワードは bcrypt で保存されている</li>
+    <li>SQL インジェクション対策（ORM/プレースホルダ）を確認</li>
+    <li>README にセットアップ手順が記載されている</li>
+    <li>DB マイグレーション（Flyway）ファイルが含まれている</li>
+    <li>デプロイ手順（GitHub Actions とサーバー側 systemd）が動作する</li>
+  </ul>
+</section>
+
+<hr/>
+
+<section>
+  <h2>8 参考コマンド集（要点）</h2>
+  <h4>ローカル起動（開発）</h4>
+  <pre><code># DB 起動（Postgres がローカルにある前提）
+# application-dev.properties を用意して起動
+mvn spring-boot:run -Dspring-boot.run.profiles=dev
+</code></pre>
+
+  <h4>ビルド（CI と同じ）</h4>
+  <pre><code>mvn -B clean package
+# jar は target/*.jar に生成
+</code></pre>
+
+  <h4>サーバーでの再起動</h4>
+  <pre><code>sudo systemctl restart ec-app.service
+sudo journalctl -u ec-app.service -f
+</code></pre>
+</section>
+
+<hr/>
+
+<section>
+  <h2>9 推奨学習順（若手エンジニア向け、参考書スタイルの短説明）</h2>
+  <ol>
+    <li><strong>Java と Spring Boot の基礎</strong>：DI、Controller/Service/Repository の役割を理解する。</li>
+    <li><strong>REST API 設計</strong>：ステータスコード、エラーフォーマット、ページネーション設計を学ぶ。</li>
+    <li><strong>RDB と SQL（PostgreSQL）</strong>：正規化、インデックス、トランザクションの基礎。</li>
+    <li><strong>セキュリティ</strong>：パスワードハッシュ、JWT、環境変数管理。</li>
+    <li><strong>CI/CD（GitHub Actions）</strong>：ビルド→テスト→デプロイの自動化。</li>
+    <li><strong>運用</strong>：systemd、ログ、バックアップ、監視の基礎。</li>
+  </ol>
+  <p class="small">各項目は実装しながら学ぶのが最短です。まずは「小さく動く機能」を作ってテストと CI を回す習慣をつけてください。</p>
+</section>
+
+<hr/>
+
+<section>
+  <h2>10 最終メモ（提出物チェック）</h2>
+  <ul>
+    <li>ソースコード（Git リポジトリ）</li>
+    <li>API ドキュメント（OpenAPI / Swagger）</li>
+    <li>DB 設計書（DDL / ER 図 / インデックス一覧）</li>
+    <li>README（セットアップ手順・評価基準対応箇所の説明）</li>
+    <li>ユニットテスト（主要機能の正常/異常系）</li>
+  </ul>
+</section>
+
+<footer>
+  <p class="small">作成者：ベテラン SE（ガイドラインに沿った実務的なロードマップ）</p>
+</footer>
+
+</body>
+</html>

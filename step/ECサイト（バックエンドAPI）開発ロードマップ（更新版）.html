@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>ECサイト（バックエンドAPI）開発ロードマップ（Corretto 21 / Maven 手動導入 / SSH 8022）</title>
+  <style>
+    body { font-family: "Helvetica Neue", Arial, sans-serif; line-height:1.6; color:#222; padding:24px; max-width:1100px; margin:auto; }
+    h1,h2,h3,h4 { color:#0b5; margin-top:1.2em; }
+    pre { background:#f6f8fa; padding:12px; border-radius:6px; overflow:auto; }
+    code { font-family: monospace; }
+    .note { background:#fff8e1; border-left:4px solid #ffb300; padding:10px; margin:12px 0; }
+    .checklist li { margin:6px 0; }
+    .small { font-size:0.9em; color:#555; }
+    table { border-collapse:collapse; width:100%; margin:12px 0; }
+    th,td { border:1px solid #ddd; padding:8px; text-align:left; }
+    .kbd { background:#eee; border-radius:4px; padding:2px 6px; font-family:monospace; }
+  </style>
+</head>
+<body>
+
+<h1>ECサイト（バックエンドAPI）開発ロードマップ（更新版）</h1>
+
+<p class="small">このファイルは前回のロードマップを更新したものです。今回の考慮事項を反映しています：Amazon Corretto 21 を使用、Maven を手動でインストールして IntelliJ で利用する手順、Ubuntu Server の SSH ポートは 8022、接続は IP アドレスで行う、DB クライアントは A5 Mk-2 SQL、Nginx の目的説明と Apache での代替検討。</p>
+
+<hr/>
+
+<h2>前提（今回の追加条件）</h2>
+<ul>
+  <li><strong>Java 実行環境：</strong>Amazon Corretto <strong>21</strong> を開発・本番で統一して使用する。</li>
+  <li><strong>ビルドツール：</strong>Maven を手動でインストールし、IntelliJ から利用できるようにする。</li>
+  <li><strong>デプロイ先（Ubuntu Server）：</strong>SSH ポートは <strong>8022</strong> に変更済み。ホストからはサーバーの <strong>IPアドレス</strong> を使って接続する。</li>
+  <li><strong>DB クライアント：</strong>A5 Mk-2 SQL を使用する。</li>
+  <li><strong>リバースプロキシ：</strong>Nginx を想定。目的の説明と Apache での代替可否を下で詳述。</li>
+</ul>
+
+<hr/>
+
+<h2>全体ロードマップ（フェーズ別）</h2>
+<ol>
+  <li><strong>準備フェーズ</strong>（Corretto 21 / Maven / IntelliJ / VirtualBox Ubuntu の準備）</li>
+  <li><strong>設計フェーズ</strong>（API・DB・認可設計）</li>
+  <li><strong>実装フェーズ</strong>（Spring Boot + Maven、ユニットテスト）</li>
+  <li><strong>CI/CD 構築フェーズ</strong>（GitHub Actions → SSH(8022) 経由で Ubuntu へデプロイ）</li>
+  <li><strong>検証・ドキュメント化フェーズ</strong>（Swagger・README・評価基準対応）</li>
+</ol>
+
+<hr/>
+
+<h2>1 準備フェーズ（詳細手順）</h2>
+
+<h3>1.1 Windows 11 開発機：Amazon Corretto 21 の導入</h3>
+<p>開発・本番で同一の JDK を使うことが重要です。Corretto 21 をインストールして IntelliJ と Maven が参照する JDK に設定します。</p>
+
+<pre><code># 手順（概略）
+1. Amazon Corretto 21 のインストーラ（Windows MSI）をダウンロード
+   - Corretto の公式ダウンロードページから "Amazon Corretto 21" を選択
+2. MSI を実行してインストール
+3. 環境変数を確認（PATH に java が通る）
+   > java -version
+   # 出力例: openjdk version "21" 2024-09-xx ...
+4. IntelliJ の設定
+   - File > Project Structure > SDKs で Corretto 21 を追加
+   - Project SDK と Module SDK を Corretto 21 に設定
+</code></pre>
+
+<div class="note"><strong>ポイント：</strong>JDK のマイナーバージョン差で動作が変わることがあるため、開発機とサーバーで同じ Corretto 21 のビルドを使ってください。</div>
+
+<h3>1.2 Maven を手動でインストールし IntelliJ で利用する手順</h3>
+<p>IntelliJ は内蔵の Maven を使えますが、CI と同じローカル Maven を使うことで差異を減らします。以下は Windows での手順です。</p>
+
+<pre><code># 1. Maven のダウンロードとインストール（Windows）
+1. https://maven.apache.org/download.cgi から Binary zip をダウンロード
+2. zip を展開（例: C:\tools\apache-maven-3.9.x）
+3. 環境変数を設定
+   - M2_HOME=C:\tools\apache-maven-3.9.x
+   - MAVEN_HOME=C:\tools\apache-maven-3.9.x
+   - PATH に %M2_HOME%\bin を追加
+4. 動作確認:
+   > mvn -v
+   # Java version: 21 (Corretto 21) が表示されること
+
+# 2. IntelliJ で外部 Maven を使う設定
+1. File > Settings > Build, Execution, Deployment > Build Tools > Maven
+2. "Maven home directory" を "Bundled (Maven x.x.x)" から "External" に切り替え、C:\tools\apache-maven-3.9.x を指定
+3. "User settings file" や "Local repository" を必要に応じて指定（CI と同じ settings.xml を使う場合はコピー）
+4. プロジェクトを再インポート（右上の Maven アイコン > Reimport All Maven Projects）
+</code></pre>
+
+<div class="note"><strong>理由：</strong>CI（GitHub Actions）とローカルで同じ Maven バージョン・settings.xml を使うと、依存解決やビルド結果の差異を減らせます。</div>
+
+<h3>1.3 VirtualBox 上の Ubuntu Server（GUI なし）準備（要点）</h3>
+<ul>
+  <li>Ubuntu Server をインストール</li>
+  <li>SSH のポートを <strong>8022</strong> に変更済み（サーバー側の sshd_config で Port 8022）</li>
+  <li>ホストからはサーバーの <strong>IPアドレス</strong> を使って接続（例: <code>ssh -p 8022 deploy@192.168.56.101</code>）</li>
+  <li>サーバーに Corretto 21、PostgreSQL、Nginx（または Apache）をインストール</li>
+</ul>
+
+<pre><code># SSH 接続例（ホスト側）
+ssh -i ~/.ssh/deploy_key -p 8022 deploy@192.168.56.101
+</code></pre>
+
+<div class="note"><strong>重要：</strong>VirtualBox のネットワーク設定は「ブリッジ」または「ホストオンリー」など、IP アドレスでアクセスできる方式にしてください。NAT のままではホストから直接 IP でアクセスしづらくなります。</div>
+
+<h3>1.4 Ubuntu 側：Corretto 21 / PostgreSQL / Nginx の導入（要点）</h3>
+<pre><code># Ubuntu の例（概略）
+sudo apt update && sudo apt upgrade -y
+
+# Corretto 21 (deb パッケージを使用する例)
+wget https://corretto.aws/downloads/latest/amazon-corretto-21-x64-linux-jdk.deb
+sudo dpkg -i amazon-corretto-21-*-linux-x64.deb
+java -version
+
+# PostgreSQL
+sudo apt install -y postgresql postgresql-contrib
+
+# Nginx (リバースプロキシ)
+sudo apt install -y nginx
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+# SSH ポート 8022 を許可
+sudo ufw allow 8022/tcp
+</code></pre>
+
+<hr/>
+
+<h2>2 DB クライアント：A5 Mk-2 SQL の利用</h2>
+<p>A5 Mk-2 SQL を使う理由：Windows 環境での軽量な SQL クライアントで、PostgreSQL に接続可能。接続情報（IP, port, DB 名, ユーザー, パスワード）を設定して利用します。</p>
+
+<pre><code># A5 Mk-2 SQL の接続設定（概略）
+- Host: 192.168.56.101
+- Port: 5432
+- Database: ec_db
+- User: ec_user
+- Password: (設定したパスワード)
+</code></pre>
+
+<div class="note">A5 Mk-2 は Windows ネイティブの GUI クライアントです。pgAdmin や DBeaver と比べて軽量で操作が速い点が特徴です。</div>
+
+<hr/>
+
+<h2>3 Nginx の目的と Apache での代替検討</h2>
+
+<h3>3.1 Nginx をリバースプロキシに使う目的（初心者向け）</h3>
+<ul>
+  <li><strong>TLS 終端（HTTPS 化）</strong>：Nginx が外部からの HTTPS 接続を受け、内部の Spring Boot アプリ（通常は localhost:8080）へ HTTP で転送します。これによりアプリ本体は TLS を意識せずに済みます。</li>
+  <li><strong>静的コンテンツ配信</strong>：画像や CSS、JS などを Nginx が高速に配信できます（アプリは API のみ担当）。</li>
+  <li><strong>負荷分散・プロキシ機能</strong>：将来的に複数インスタンスを立てる場合、Nginx がロードバランサとして振る舞えます。</li>
+  <li><strong>セキュリティの分離</strong>：公開用のポート（80/443）は Nginx が受け、アプリは内部ポートで動かすことで攻撃面を限定できます。</li>
+</ul>
+
+<h3>3.2 Apache で代替できるか（結論と比較）</h3>
+<p>結論：<strong>はい、Apache でも代替可能</strong>です。ただし用途や運用方針で選択が変わります。</p>
+
+<table>
+  <tr><th>観点</th><th>Nginx</th><th>Apache</th></tr>
+  <tr><td>パフォーマンス（静的配信）</td><td>高い（イベント駆動で少ないメモリ）</td><td>良好（モジュールによるがプロセスモデルでメモリ増加しやすい）</td></tr>
+  <tr><td>リバースプロキシ機能</td><td>広く使われる（設定が簡潔）</td><td>可能（mod_proxy を使用）</td></tr>
+  <tr><td>設定の簡潔さ</td><td>比較的シンプル</td><td>モジュールが多く柔軟だが設定が複雑になりがち</td></tr>
+  <tr><td>運用実績</td><td>コンテナ/クラウド環境で広く採用</td><td>従来の LAMP 系で長年の実績あり</td></tr>
+</table>
+
+<p class="small">運用上の推奨：初心者で「軽くて設定が分かりやすい」「高い同時接続性能」を重視するなら Nginx を推奨します。既に Apache に慣れている、または Apache 固有のモジュール（.htaccess など）を使いたい場合は Apache を選んでも問題ありません。</p>
+
+<hr/>
+
+<h2>4 CI/CD（GitHub Actions）とデプロイ（SSH 8022 / IP アドレス）</h2>
+
+<h3>4.1 ワークフローのポイント（更新）</h3>
+<ul>
+  <li>ビルドは GitHub Actions 上で Corretto 21 を使う（actions/setup-java の distribution: 'corretto', java-version: '21'）。</li>
+  <li>デプロイは SSH ポート <strong>8022</strong> を使ってサーバーの IP アドレスへ接続する。GitHub Secrets に <code>SERVER_HOST</code>（IP アドレス）、<code>SERVER_SSH_PORT</code>=8022、<code>SERVER_USER</code>、<code>SERVER_SSH_KEY</code> を登録する。</li>
+  <li>デプロイ後は systemd でアプリを管理し、Nginx（または Apache）で 80/443 を受けて内部のアプリへプロキシする。</li>
+</ul>
+
+<pre><code name="yaml"># GitHub Actions の deploy スニペット（要点）
+- name: Set up JDK 21 (Corretto)
+  uses: actions/setup-java@v4
+  with:
+    distribution: 'corretto'
+    java-version: '21'
+
+- name: Deploy to server via SSH
+  uses: appleboy/ssh-action@v0.1.7
+  with:
+    host: ${{ secrets.SERVER_HOST }}        # IP アドレスを指定
+    username: ${{ secrets.SERVER_USER }}
+    key: ${{ secrets.SERVER_SSH_KEY }}
+    port: ${{ secrets.SERVER_SSH_PORT }}    # 8022
+    script: |
+      # デプロイ処理（scp 等）と systemd 再起動
+</code></pre>
+
+<div class="note">GitHub Actions からサーバーへ接続する際は、サーバー側で公開鍵を authorized_keys に登録し、秘密鍵を GitHub Secrets に登録してください。秘密鍵にはパスフレーズを設定することを推奨します。</div>
+
+<hr/>
+
+<h2>5 実装・運用上の注意（Corretto 21 / Maven / Nginx/Apache）</h2>
+<ul>
+  <li><strong>依存性の固定：</strong>pom.xml の依存バージョンは明示的に固定し、CI でキャッシュを使って再現性を高める。</li>
+  <li><strong>JVM オプション：</strong>本番ではメモリ設定（-Xms/-Xmx）を systemd の ExecStart に指定して安定稼働させる。</li>
+  <li><strong>プロファイル：</strong>Spring のプロファイル（dev/prod）を使い、DB 接続やログレベルを切り替える。</li>
+  <li><strong>プロキシ設定：</strong>Spring Boot を Nginx/Apache の背後で動かす場合、X-Forwarded-* ヘッダを正しく扱う設定を行う（Spring の ForwardedHeaderFilter 等）。</li>
+</ul>
+
+<hr/>
+
+<h2>6 参考コマンド集（更新）</h2>
+
+<h4>ローカル：Maven 動作確認</h4>
+<pre><code>mvn -v
+# 出力に Java version "21" (Corretto 21) が含まれていることを確認
+</code></pre>
+
+<h4>ホストからサーバーへ SSH（IP アドレス・ポート 8022）</h4>
+<pre><code>ssh -i ~/.ssh/deploy_key -p 8022 deploy@192.168.56.101
+</code></pre>
+
+<h4>Ubuntu サーバーで systemd を使った再起動</h4>
+<pre><code>sudo systemctl restart ec-app.service
+sudo journalctl -u ec-app.service -f
+</code></pre>
+
+<hr/>
+
+<h2>7 ドキュメント化・提出物（更新点）</h2>
+<ul>
+  <li>README に Corretto 21 を使う旨とインストール手順を明記すること。</li>
+  <li>Maven を手動でインストールした手順と IntelliJ で外部 Maven を指定する手順を README に記載すること。</li>
+  <li>デプロイ手順では「SSH ポート 8022」「接続は IP アドレス」を明記すること（例: ssh -p 8022 deploy@<IP>）。</li>
+  <li>DB クライアントの接続例（A5 Mk-2 SQL）を README に記載すること。</li>
+  <li>Nginx を使う理由と、Apache を選ぶ場合の注意点を README に短くまとめること。</li>
+</ul>
+
+<hr/>
+
+<h2>8 チェックリスト（今回の追加考慮を含む）</h2>
+<ul class="checklist">
+  <li>開発・本番ともに Amazon Corretto 21 を使用している</li>
+  <li>Maven を手動でインストールし、IntelliJ が外部 Maven を参照する設定を README に記載している</li>
+  <li>GitHub Actions は Corretto 21 を使ってビルドしている</li>
+  <li>デプロイは SSH ポート 8022、サーバーは IP アドレスで接続する手順が動作する</li>
+  <li>A5 Mk-2 SQL で PostgreSQL に接続できることを確認している</li>
+  <li>Nginx（または Apache）をリバースプロキシとして設定し、HTTPS 終端が機能している</li>
+</ul>
+
+<hr/>
+
+<h2>9 最後に（実務的アドバイス）</h2>
+<p class="small">今回の変更点は「実運用に近い環境を再現する」ための重要な調整です。Corretto 21 は JDK のメジャーバージョンが上がるため、依存ライブラリやプラグインの互換性を必ず確認してください。Maven を外部に揃えることで CI とローカルの差異を減らし、デバッグやトラブルシュートが容易になります。Nginx と Apache はどちらも有効な選択肢ですが、初学者には設定がシンプルで高負荷に強い Nginx をまずは推奨します。</p>
+
+<footer>
+  <p class="small">作成者：ベテラン SE（Corretto 21 / Maven 手動導入 / SSH 8022 / A5 Mk-2 SQL / Nginx vs Apache の検討を反映）</p>
+</footer>
+
+</body>
+</html>
