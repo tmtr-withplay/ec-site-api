@@ -1,6 +1,7 @@
 name: CI-CD
 env:
   SPRING_DATASOURCE_URL: ${{ secrets.SPRING_DATASOURCE_URL }}
+  SPRING_DATASOURCE_DBNAME: ${{ secrets.SPRING_DATASOURCE_DBNAME }}
   SPRING_DATASOURCE_USERNAME: ${{ secrets.SPRING_DATASOURCE_USERNAME }}
   SPRING_DATASOURCE_PASSWORD: ${{ secrets.SPRING_DATASOURCE_PASSWORD }}
 
@@ -23,6 +24,27 @@ jobs:
   feature-tests:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18.4
+        env:
+          # 作成するデータベース名
+          POSTGRES_DB: $SPRING_DATASOURCE_DBNAME
+          # データベースユーザー名
+          POSTGRES_USER: $SPRING_DATASOURCE_USERNAME
+          # パスワード
+          POSTGRES_PASSWORD: $SPRING_DATASOURCE_PASSWORD
+        ports:
+          - 5432:5432
+        options: >-
+          # ヘルスチェック
+          --health-cmd pg_isready
+          # チェック間隔
+          --health-interval 10s
+          # タイムアウト時間
+          --health-timeout 5s
+          # リトライ回数
+          --health-retries 5
     steps:
       - name: リポジトリのコードをランナーにクローン
         uses: actions/checkout@v4
