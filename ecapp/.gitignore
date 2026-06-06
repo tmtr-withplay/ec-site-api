@@ -11,5 +11,5 @@ target/
 *.war
 
 # 機密情報（絶対にコミットしない！）
-application.properties
+*.ps1
 *.env
