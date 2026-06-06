@@ -1,0 +1,39 @@
+name: CI-CD
+
+# 実行トリガー
+on:
+  push:
+    branches:
+      - "feature/**"
+  pull_request:
+    branches:
+      - develop
+      - release
+      - main
+    # PRのクローズ時（マージ含む）
+    types: [closed]
+
+# 実行ジョブ
+jobs:
+  # 1) featureへのpush時にテスト・ビルド
+  feature-tests:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    env:
+      SPRING_DATASOURCE_URL: ${{ secrets.SPRING_DATASOURCE_URL }}
+      SPRING_DATASOURCE_USERNAME: ${{ secrets.SPRING_DATASOURCE_USERNAME }}
+      SPRING_DATASOURCE_PASSWORD: ${{ secrets.SPRING_DATASOURCE_PASSWORD }}
+    steps:
+      - name: リポジトリのコードをランナーにクローン
+        uses: actions/checkout@v4
+
+      - name: Amazon Corretto 21 をセットアップ
+        uses: actions/setup-java@v4
+        with:
+          java-version: "21"
+          distribution: "corretto"
+          # ライブラリをキャッシュ
+          cache: maven
+
+      - name: テスト・ビルド実行
+        run: cd ./ecapp/ecapp && mkdir target && mvn -B package
