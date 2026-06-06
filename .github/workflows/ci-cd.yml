@@ -37,13 +37,9 @@ jobs:
         ports:
           - 5432:5432
         options: >-
-          # ヘルスチェック
           --health-cmd pg_isready
-          # チェック間隔
           --health-interval 10s
-          # タイムアウト時間
           --health-timeout 5s
-          # リトライ回数
           --health-retries 5
     steps:
       - name: リポジトリのコードをランナーにクローン
