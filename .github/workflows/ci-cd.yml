@@ -29,11 +29,11 @@ jobs:
         image: postgres:18.4
         env:
           # 作成するデータベース名
-          POSTGRES_DB: $SPRING_DATASOURCE_DBNAME
+          POSTGRES_DB: ${{ secrets.SPRING_DATASOURCE_DBNAME }}
           # データベースユーザー名
-          POSTGRES_USER: $SPRING_DATASOURCE_USERNAME
+          POSTGRES_USER: ${{ secrets.SPRING_DATASOURCE_USERNAME }}
           # パスワード
-          POSTGRES_PASSWORD: $SPRING_DATASOURCE_PASSWORD
+          POSTGRES_PASSWORD: ${{ secrets.SPRING_DATASOURCE_PASSWORD }}
         ports:
           - 5432:5432
         options: >-
