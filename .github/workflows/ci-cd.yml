@@ -97,7 +97,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: artifacts
-          path: ./target/*.jar
+          # 成果物の格納先を絶対パスで指定
+          path: /home/runner/work/ec-site-api/ec-site-api/ecapp/ecapp/target/ecapp-0.0.1-SNAPSHOT.jar
 
   # 3) release ⇒ main へのマージ時にタグ付け
   push-tag:
