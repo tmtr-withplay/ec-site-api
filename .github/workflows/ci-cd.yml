@@ -1,16 +1,16 @@
 name: CI-CD
+# ビルド時に必要な環境変数をまとめて設定
 env:
   SPRING_DATASOURCE_URL: ${{ secrets.SPRING_DATASOURCE_URL }}
-  SPRING_DATASOURCE_DBNAME: ${{ secrets.SPRING_DATASOURCE_DBNAME }}
   SPRING_DATASOURCE_USERNAME: ${{ secrets.SPRING_DATASOURCE_USERNAME }}
   SPRING_DATASOURCE_PASSWORD: ${{ secrets.SPRING_DATASOURCE_PASSWORD }}
 
-# 実行トリガー
 on:
   push:
     branches:
       - "feature/**"
   pull_request:
+    # PR先のブランチ指定
     branches:
       - develop
       - release
@@ -18,7 +18,6 @@ on:
     # PRのクローズ時（マージ含む）
     types: [closed]
 
-# 実行ジョブ
 jobs:
   # 1) featureへのpush時にテスト・ビルド
   feature-tests:
@@ -55,3 +54,64 @@ jobs:
 
       - name: テスト・ビルド実行
         run: cd ./ecapp/ecapp && mkdir target && mvn -B package
+
+  # 2) develop・release・mainへのPR merged時にテスト・ビルド・アップロード
+  pr-merge-upload:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18.4
+        env:
+          # 作成するデータベース名
+          POSTGRES_DB: ${{ secrets.SPRING_DATASOURCE_DBNAME }}
+          # データベースユーザー名
+          POSTGRES_USER: ${{ secrets.SPRING_DATASOURCE_USERNAME }}
+          # パスワード
+          POSTGRES_PASSWORD: ${{ secrets.SPRING_DATASOURCE_PASSWORD }}
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: PR merged時のheadのコードをランナーにクローン
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Amazon Corretto 21 をセットアップ
+        uses: actions/setup-java@v4
+        with:
+          java-version: "21"
+          distribution: "corretto"
+          # ライブラリをキャッシュ
+          cache: maven
+
+      - name: テスト・ビルド実行
+        run: cd ./ecapp/ecapp && mkdir target && mvn -B package
+
+      - name: 成果物のアップロード実行
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts
+          path: ./target/*.jar
+
+  # 3) release ⇒ main へのマージ時にタグ付け
+  push-tag:
+    needs: pr-merge-upload
+    # マージ元のブランチ（release）に対してタグ付け
+    if: github.event.pull_request.head.ref == 'release'
+    runs-on: ubuntu-latest
+    steps:
+      - name: リポジトリのコードをランナーにクローン
+        uses: actions/checkout@v4
+
+      - name: タグ付け実行
+        run: |
+          git fetch origin ${{ github.event.pull_request.head.ref }}
+          git switch ${{ github.event.pull_request.head.ref }}
+          git tag `${{ github.event.pull_request.head.ref }}_`date +%Y%m%d%H%M%S``
+          git push origin `${{ github.event.pull_request.head.ref }}_`date +%Y%m%d%H%M%S``
