@@ -114,5 +114,5 @@ jobs:
         run: |
           git fetch origin ${{ github.event.pull_request.head.ref }}
           git switch ${{ github.event.pull_request.head.ref }}
-          git tag `echo "$(date '+%Y-%m-%d %H:%M:%S')"`
-          git push origin `echo "$(date '+%Y-%m-%d %H:%M:%S')"`
+          git tag `echo "$(date '+%Y-%m-%d')"`
+          git push origin `echo "$(date '+%Y-%m-%d')"`
